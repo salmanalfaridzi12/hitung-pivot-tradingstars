@@ -15,7 +15,7 @@ function useAnimatedNumber(target, duration = 900) {
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [target]);
+  }, [target, duration]); // ✅ FIX 1: tambah 'duration' ke dependency array
   return val;
 }
 
@@ -133,7 +133,6 @@ function getBreakoutProb(result, currentPrice) {
   return { bullPct, bearPct: 100-bullPct, momentum: (result.r1-cp)<(cp-result.s1) ? "Dekat Resistance" : "Dekat Support" };
 }
 
-// ── NEW: Pivot Strength Indicator ────────────────────────
 function getPivotStrength(result) {
   if (!result) return null;
   const rangeTotal = result.r3 - result.s3 || 1;
@@ -146,12 +145,11 @@ function getPivotStrength(result) {
   return { strength, label, color, r1r2Gap, s1s2Gap, pivotZone };
 }
 
-// ── NEW: Auto Bias Analyzer ───────────────────────────────
 function getAutoBias(result, currentPrice) {
   if (!result || !currentPrice) return null;
   const cp = parseFloat(currentPrice); if (isNaN(cp)) return null;
   const levels = [result.r3,result.r2,result.r1,result.pivot,result.s1,result.s2,result.s3];
-  const above = levels.filter(l => l > cp).length;
+  // ✅ FIX 2: hapus variabel 'above' yang tidak dipakai
   const below = levels.filter(l => l < cp).length;
   const bullScore = Math.round((below / 6) * 100);
   const distFromPP = ((cp - result.pivot) / result.pivot) * 100;
@@ -161,23 +159,22 @@ function getAutoBias(result, currentPrice) {
   else if (cp > result.s1) { bias="NEUTRAL";      biasColor="#f59e0b"; biasIcon="🟡🟡⚪"; }
   else if (cp > result.s2) { bias="SELL";         biasColor="#f97316"; biasIcon="🔴🔴⚪"; }
   else                     { bias="STRONG SELL";  biasColor="#dc2626"; biasIcon="🔴🔴🔴"; }
-  return { bias, biasColor, biasIcon, bullScore, above, below, distFromPP: distFromPP.toFixed(2) };
+  // Hitung ulang above dari levels untuk UI card
+  const aboveCount = levels.filter(l => l > cp).length;
+  return { bias, biasColor, biasIcon, bullScore, above: aboveCount, below, distFromPP: distFromPP.toFixed(2) };
 }
 
-// ── NEW: Smart Entry Zone ─────────────────────────────────
 function getSmartEntryZone(result, currentPrice) {
   if (!result || !currentPrice) return null;
   const cp = parseFloat(currentPrice); if (isNaN(cp)) return null;
   const buffer = (result.r1 - result.s1) * 0.04;
   const zones = [];
-  // Long zones
   if (cp >= result.pivot - buffer && cp <= result.pivot + buffer)
     zones.push({ type:"LONG", label:"Bounce PP", entryLow: result.pivot-buffer, entryHigh: result.pivot+buffer, sl: result.s1, tp: result.r1, quality: "A+", color:"#16a34a" });
   if (cp >= result.s1 - buffer && cp <= result.s1 + buffer)
     zones.push({ type:"LONG", label:"Bounce S1", entryLow: result.s1-buffer, entryHigh: result.s1+buffer, sl: result.s2, tp: result.pivot, quality: "A", color:"#22c55e" });
   if (cp >= result.s2 - buffer && cp <= result.s2 + buffer)
     zones.push({ type:"LONG", label:"Bounce S2", entryLow: result.s2-buffer, entryHigh: result.s2+buffer, sl: result.s3, tp: result.s1, quality: "B", color:"#84cc16" });
-  // Short zones
   if (cp >= result.r1 - buffer && cp <= result.r1 + buffer)
     zones.push({ type:"SHORT", label:"Rejection R1", entryLow: result.r1-buffer, entryHigh: result.r1+buffer, sl: result.r2, tp: result.pivot, quality: "A", color:"#ef4444" });
   if (cp >= result.r2 - buffer && cp <= result.r2 + buffer)
@@ -185,7 +182,6 @@ function getSmartEntryZone(result, currentPrice) {
   return zones.length > 0 ? zones : null;
 }
 
-// ── NEW: Auto Risk Calculator ─────────────────────────────
 function AutoRiskCalc({ result, currentPrice, fmt, t, dark }) {
   const [capital, setCapital] = useState("10000000");
   const [riskPct, setRiskPct] = useState("2");
@@ -261,12 +257,9 @@ function AutoRiskCalc({ result, currentPrice, fmt, t, dark }) {
   );
 }
 
-// ── NEW: Trend Direction Arrow ────────────────────────────
 function TrendArrow({ result, currentPrice, t, dark }) {
   if (!result || !currentPrice) return null;
   const cp = parseFloat(currentPrice); if (isNaN(cp)) return null;
-  const levels = [result.r3,result.r2,result.r1,result.pivot,result.s1,result.s2,result.s3];
-  const above = levels.filter(l=>l>cp).length;
   const pctFromPP = ((cp - result.pivot) / result.pivot) * 100;
 
   let arrows, trendLabel, trendColor, trendBg, trendBorder, desc;
@@ -292,11 +285,10 @@ function TrendArrow({ result, currentPrice, t, dark }) {
         </div>
         <div style={{ textAlign:"right",flexShrink:0,marginLeft:"8px" }}>
           <div style={{ fontSize:"9px",color:t.sub,marginBottom:"2px" }}>POSISI</div>
-          <div style={{ fontSize:"18px",fontWeight:900,color:trendColor }}>{pctFromPP > 0 ? "+" : ""}{pctFromPP}%</div>
+          <div style={{ fontSize:"18px",fontWeight:900,color:trendColor }}>{pctFromPP > 0 ? "+" : ""}{pctFromPP.toFixed(2)}%</div>
           <div style={{ fontSize:"9px",color:t.sub }}>dari PP</div>
         </div>
       </div>
-      {/* Trend bar S3 to R3 */}
       <div style={{ marginTop:"4px" }}>
         <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"4px" }}>
           <span style={{ fontSize:"9px",color:"#7c3aed" }}>S3</span>
@@ -400,7 +392,6 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════
 export default function PivotAnalyzer() {
   const [high,setHigh]=useState(""); const [low,setLow]=useState(""); const [close,setClose]=useState("");
   const [currentPrice,setCurrentPrice]=useState(""); const [result,setResult]=useState(null);
@@ -578,7 +569,6 @@ export default function PivotAnalyzer() {
             </div>
           </FadeIn>
 
-          {/* Pivot Strength Indicator */}
           {pivotStrength && (
             <FadeIn delay={0}>
               <div style={{ ...cardStyle,padding:"14px 16px" }}>
@@ -601,14 +591,12 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Trend Direction Arrow */}
           {result && currentPrice && (
             <FadeIn delay={0}>
               <TrendArrow result={result} currentPrice={currentPrice} t={t} dark={dark} />
             </FadeIn>
           )}
 
-          {/* Auto Bias Analyzer */}
           {autoBias && (
             <FadeIn delay={0}>
               <div style={{ ...cardStyle,padding:"14px 16px" }}>
@@ -640,7 +628,6 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Smart Entry Zone */}
           {smartZones && (
             <FadeIn delay={0}>
               <div style={{ marginBottom:"12px" }}>
@@ -668,7 +655,6 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Sentiment */}
           {sentiment && (
             <FadeIn delay={0}>
               <div style={{ background:sentiment.bg,border:`1px solid ${sentiment.border}`,borderRadius:"12px",padding:"12px 16px",marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -686,7 +672,6 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Breakout Probability */}
           {breakout && (
             <FadeIn delay={0}>
               <div style={{ ...cardStyle,padding:"14px 16px" }}>
@@ -709,7 +694,6 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Pivot Ladder */}
           {levelDefs.length>0 && (
             <FadeIn delay={0}>
               <div style={cardStyle}>
@@ -773,129 +757,55 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-          {/* Auto Risk Calculator */}
           {result && currentPrice && (
             <FadeIn delay={0}>
               <AutoRiskCalc result={result} currentPrice={currentPrice} fmt={fmt} t={t} dark={dark} />
             </FadeIn>
           )}
 
-          {/* Trade Setup */}
           {result && currentPrice && (
             <FadeIn delay={0}><TradeSetup result={result} currentPrice={currentPrice} fmt={fmt} t={t} dark={dark} /></FadeIn>
           )}
 
-          {/* Scenario + Copy */}
-        {/* Scenario + Copy */}
-{result && (
-  <FadeIn delay={0}>
-    <div style={{ marginBottom:"12px" }}>
-
-      <div style={{
-        fontSize:"10px",
-        color:t.sub,
-        marginBottom:"10px",
-        padding:"8px 10px",
-        background:dark?"rgba(37,99,235,0.08)":"#eff6ff",
-        border:"1px solid #bfdbfe",
-        borderRadius:"8px"
-      }}>
-        Analisa menggunakan metode <b>Pivot Point (Floor Method)</b> untuk menentukan area support dan resistance intraday.
-      </div>
-
-      <div style={{ display:"flex",flexDirection:"column",gap:"8px",marginBottom:"10px" }}>
-
-        {/* Bullish */}
-        <div style={{
-          background:dark?"#14532d":"#f0fdf4",
-          border:"1px solid #bbf7d0",
-          borderRadius:"12px",
-          padding:"14px 16px"
-        }}>
-          <div style={{ display:"flex",gap:"6px",alignItems:"center",marginBottom:"8px" }}>
-            <span>📈</span>
-            <span style={{ fontSize:"11px",fontWeight:800,color:"#16a34a" }}>
-              SKENARIO NAIK (BULLISH)
-            </span>
-          </div>
-
-          <p style={{ margin:0,fontSize:"12px",lineHeight:1.7,color:dark?"#bbf7d0":"#166534" }}>
-            Jika harga mampu bertahan di atas <b>{fmt(result.pivot)}</b>, maka bias market cenderung bullish.
-            <br/><br/>
-
-            Konfirmasi kenaikan terjadi jika harga menembus <b>{fmt(result.r1)}</b>.
-            <br/><br/>
-
-            Target kenaikan:
-            <br/>• Target 1 → <b>{fmt(result.r1)}</b>
-            <br/>• Target 2 → <b>{fmt(result.r2)}</b>
-            <br/>• Target 3 → <b>{fmt(result.r3)}</b>
-
-            <br/><br/>
-
-            Invalidasi bullish jika harga kembali turun di bawah <b>{fmt(result.pivot)}</b>.
-          </p>
-        </div>
-
-        {/* Bearish */}
-        <div style={{
-          background:dark?"#7f1d1d":"#fef2f2",
-          border:"1px solid #fecaca",
-          borderRadius:"12px",
-          padding:"14px 16px"
-        }}>
-          <div style={{ display:"flex",gap:"6px",alignItems:"center",marginBottom:"8px" }}>
-            <span>📉</span>
-            <span style={{ fontSize:"11px",fontWeight:800,color:"#dc2626" }}>
-              SKENARIO TURUN (BEARISH)
-            </span>
-          </div>
-
-          <p style={{ margin:0,fontSize:"12px",lineHeight:1.7,color:dark?"#fecaca":"#991b1b" }}>
-            Jika harga gagal bertahan di atas <b>{fmt(result.pivot)}</b>, maka tekanan jual berpotensi muncul.
-            <br/><br/>
-
-            Konfirmasi penurunan terjadi jika harga menembus <b>{fmt(result.s1)}</b>.
-            <br/><br/>
-
-            Target penurunan:
-            <br/>• Target 1 → <b>{fmt(result.s1)}</b>
-            <br/>• Target 2 → <b>{fmt(result.s2)}</b>
-            <br/>• Target 3 → <b>{fmt(result.s3)}</b>
-
-            <br/><br/>
-
-            Invalidasi bearish jika harga kembali naik di atas <b>{fmt(result.pivot)}</b>.
-          </p>
-        </div>
-
-      </div>
-
-      {/* Copy Button */}
-      <button
-        onClick={copyAnalisa}
-        style={{
-          width:"100%",
-          padding:"13px",
-          background:copied?"#16a34a":"#2563eb",
-          color:"#fff",
-          border:"none",
-          borderRadius:"10px",
-          fontSize:"13px",
-          fontWeight:800,
-          cursor:"pointer",
-          transition:"background 0.3s",
-          boxShadow:copied
-            ?"0 4px 14px rgba(22,163,74,0.4)"
-            :"0 4px 14px rgba(37,99,235,0.35)"
-        }}
-      >
-        {copied ? "✅ Berhasil Disalin!" : "📋 Copy Analisa"}
-      </button>
-
-    </div>
-  </FadeIn>
-)}
+          {result && (
+            <FadeIn delay={0}>
+              <div style={{ marginBottom:"12px" }}>
+                <div style={{ fontSize:"10px",color:t.sub,marginBottom:"10px",padding:"8px 10px",background:dark?"rgba(37,99,235,0.08)":"#eff6ff",border:"1px solid #bfdbfe",borderRadius:"8px" }}>
+                  Analisa menggunakan metode <b>Pivot Point (Floor Method)</b> untuk menentukan area support dan resistance intraday.
+                </div>
+                <div style={{ display:"flex",flexDirection:"column",gap:"8px",marginBottom:"10px" }}>
+                  <div style={{ background:dark?"#14532d":"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:"12px",padding:"14px 16px" }}>
+                    <div style={{ display:"flex",gap:"6px",alignItems:"center",marginBottom:"8px" }}>
+                      <span>📈</span>
+                      <span style={{ fontSize:"11px",fontWeight:800,color:"#16a34a" }}>SKENARIO NAIK (BULLISH)</span>
+                    </div>
+                    <p style={{ margin:0,fontSize:"12px",lineHeight:1.7,color:dark?"#bbf7d0":"#166534" }}>
+                      Jika harga mampu bertahan di atas <b>{fmt(result.pivot)}</b>, maka bias market cenderung bullish.<br/><br/>
+                      Konfirmasi kenaikan terjadi jika harga menembus <b>{fmt(result.r1)}</b>.<br/><br/>
+                      Target kenaikan:<br/>• Target 1 → <b>{fmt(result.r1)}</b><br/>• Target 2 → <b>{fmt(result.r2)}</b><br/>• Target 3 → <b>{fmt(result.r3)}</b><br/><br/>
+                      Invalidasi bullish jika harga kembali turun di bawah <b>{fmt(result.pivot)}</b>.
+                    </p>
+                  </div>
+                  <div style={{ background:dark?"#7f1d1d":"#fef2f2",border:"1px solid #fecaca",borderRadius:"12px",padding:"14px 16px" }}>
+                    <div style={{ display:"flex",gap:"6px",alignItems:"center",marginBottom:"8px" }}>
+                      <span>📉</span>
+                      <span style={{ fontSize:"11px",fontWeight:800,color:"#dc2626" }}>SKENARIO TURUN (BEARISH)</span>
+                    </div>
+                    <p style={{ margin:0,fontSize:"12px",lineHeight:1.7,color:dark?"#fecaca":"#991b1b" }}>
+                      Jika harga gagal bertahan di atas <b>{fmt(result.pivot)}</b>, maka tekanan jual berpotensi muncul.<br/><br/>
+                      Konfirmasi penurunan terjadi jika harga menembus <b>{fmt(result.s1)}</b>.<br/><br/>
+                      Target penurunan:<br/>• Target 1 → <b>{fmt(result.s1)}</b><br/>• Target 2 → <b>{fmt(result.s2)}</b><br/>• Target 3 → <b>{fmt(result.s3)}</b><br/><br/>
+                      Invalidasi bearish jika harga kembali naik di atas <b>{fmt(result.pivot)}</b>.
+                    </p>
+                  </div>
+                </div>
+                <button onClick={copyAnalisa}
+                  style={{ width:"100%",padding:"13px",background:copied?"#16a34a":"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:copied?"0 4px 14px rgba(22,163,74,0.4)":"0 4px 14px rgba(37,99,235,0.35)" }}>
+                  {copied ? "✅ Berhasil Disalin!" : "📋 Copy Analisa"}
+                </button>
+              </div>
+            </FadeIn>
+          )}
         </>}
 
         {tab==="avg" && (
