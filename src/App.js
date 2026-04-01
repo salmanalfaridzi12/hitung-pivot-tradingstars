@@ -117,11 +117,12 @@ export default function PivotAnalyzer() {
       const script = document.createElement('script');
       script.src = "https://telegram.org/js/telegram-widget.js?22";
       script.async = true;
-      script.setAttribute('data-telegram-login', process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || "tradingstars_id_bot");
+      // ✅ DIPERBAIKI: pakai REACT_APP_ prefix, bukan NEXT_PUBLIC_
+      script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_NAME || "tradingstars_id_bot");
       script.setAttribute('data-size', 'large');
       script.setAttribute('data-onauth', 'onTelegramAuth(user)');
       script.setAttribute('data-request-access', 'write');
-      
+
       if (authInstance.current) {
         authInstance.current.innerHTML = "";
         authInstance.current.appendChild(script);
@@ -132,20 +133,26 @@ export default function PivotAnalyzer() {
 
   const handleCheckMember = async (userId, firstName) => {
     setChecking(true);
-    const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-    const chatId = "-1002251390462"; // Gunakan Chat ID grup kamu (Trading Stars)
-
     try {
-      const response = await fetch(`https://api.telegram.org/bot${token}/getChatMember?chat_id=${chatId}&user_id=${userId}`);
+      // ✅ DIPERBAIKI: panggil serverless function, bukan langsung ke Telegram API
+      // Bot Token sekarang aman di server, tidak terekspos ke browser
+      const response = await fetch("/api/check-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
       const data = await response.json();
 
-      if (data.ok && ['member', 'administrator', 'creator'].includes(data.result.status)) {
+      if (data.isMember) {
         setIsAuthorized(true);
       } else {
         alert(`Maaf ${firstName}, kamu belum terdaftar sebagai member Trading Stars.`);
       }
-    } catch (e) { alert("Verifikasi Gagal. Pastikan Bot sudah Admin di grup."); }
-    finally { setChecking(false); }
+    } catch (e) {
+      alert("Verifikasi Gagal. Pastikan Bot sudah Admin di grup.");
+    } finally {
+      setChecking(false);
+    }
   };
 
   const hitung = () => {
@@ -192,7 +199,7 @@ export default function PivotAnalyzer() {
     <div style={{ minHeight:"100vh", background:t.bg, display:"flex", justifyContent:"center", padding:"24px 16px", fontFamily:"sans-serif", position:"relative" }}>
       <Particles dark={dark} />
       <div style={{ width:"100%", maxWidth:"430px", position:"relative", zIndex:1 }}>
-        
+
         <FadeIn delay={0}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"20px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
@@ -211,7 +218,7 @@ export default function PivotAnalyzer() {
               {["High", "Low", "Close"].map(label => (
                 <div key={label}>
                   <label style={{ fontSize:"11px", fontWeight:"700", color:t.sub, display:"block", marginBottom:"5px" }}>{label}</label>
-                  <input type="number" value={label === "High" ? high : label === "Low" ? low : close} 
+                  <input type="number" value={label === "High" ? high : label === "Low" ? low : close}
                     onChange={(e) => label === "High" ? setHigh(e.target.value) : label === "Low" ? setLow(e.target.value) : setClose(e.target.value)}
                     style={{ width:"100%", padding:"10px", background:t.input, border:`1px solid ${t.border}`, borderRadius:"8px", color:t.text, outline:"none", boxSizing:"border-box" }} />
                 </div>
