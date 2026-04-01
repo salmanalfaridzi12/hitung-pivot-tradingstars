@@ -117,7 +117,7 @@ export default function PivotAnalyzer() {
       const script = document.createElement('script');
       script.src = "https://telegram.org/js/telegram-widget.js?22";
       script.async = true;
-      // ✅ DIPERBAIKI: pakai REACT_APP_ prefix, bukan NEXT_PUBLIC_
+      // ✅ DIPERBAIKI: pakai REACT_APP_ prefix
       script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_NAME || "tradingstars_id_bot");
       script.setAttribute('data-size', 'large');
       script.setAttribute('data-onauth', 'onTelegramAuth(user)');
@@ -135,7 +135,6 @@ export default function PivotAnalyzer() {
     setChecking(true);
     try {
       // ✅ DIPERBAIKI: panggil serverless function, bukan langsung ke Telegram API
-      // Bot Token sekarang aman di server, tidak terekspos ke browser
       const response = await fetch("/api/check-member", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
