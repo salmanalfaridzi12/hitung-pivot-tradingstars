@@ -75,9 +75,9 @@ function FadeIn({ children, delay=0 }) {
 
 export default function PivotAnalyzer() {
   const [dark, setDark] = useState(true);
-
-  // ✅ TEST MODE: isAuthorized = true, skip login dulu
-  const [isAuthorized, setIsAuthorized] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false); // ✅ kembali false
+  const [checking, setChecking] = useState(false);
+  const authInstance = useRef(null);
 
   const [high, setHigh] = useState("");
   const [low, setLow] = useState("");
@@ -96,6 +96,44 @@ export default function PivotAnalyzer() {
   };
 
   useEffect(() => { const iv = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(iv); }, []);
+
+  useEffect(() => {
+    if (!isAuthorized) {
+      const script = document.createElement('script');
+      script.src = "https://telegram.org/js/telegram-widget.js?22";
+      script.async = true;
+      script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_NAME || "tradingstars_id_bot");
+      script.setAttribute('data-size', 'large');
+      script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      script.setAttribute('data-request-access', 'write');
+      if (authInstance.current) {
+        authInstance.current.innerHTML = "";
+        authInstance.current.appendChild(script);
+      }
+      window.onTelegramAuth = (user) => handleCheckMember(user.id, user.first_name);
+    }
+  }, [isAuthorized]);
+
+  const handleCheckMember = async (userId, firstName) => {
+    setChecking(true);
+    try {
+      const response = await fetch("/api/check-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await response.json();
+      if (data.isMember) {
+        setIsAuthorized(true);
+      } else {
+        alert(`Maaf ${firstName}, kamu belum terdaftar sebagai member Trading Stars.`);
+      }
+    } catch (e) {
+      alert("Verifikasi Gagal. Pastikan Bot sudah Admin di grup.");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const hitung = () => {
     const h = parseFloat(high), l = parseFloat(low), c = parseFloat(close);
@@ -117,6 +155,22 @@ export default function PivotAnalyzer() {
   };
 
   const fmt = (n) => n ? n.toLocaleString("id-ID") : "—";
+
+  if (!isAuthorized) {
+    return (
+      <div style={{ minHeight:"100vh", background:t.bg, display:"flex", justifyContent:"center", alignItems:"center", padding:"20px" }}>
+        <Particles dark={dark} />
+        <div style={{ background:t.card, padding:"40px", borderRadius:"20px", textAlign:"center", border:`1px solid ${t.border}`, maxWidth:"360px", zIndex:1 }}>
+          <div style={{ fontSize:"50px", marginBottom:"15px" }}>🛡️</div>
+          <h2 style={{ color:t.text, margin:0 }}>Trading Stars</h2>
+          <p style={{ color:t.sub, fontSize:"14px", marginBottom:"30px" }}>Khusus member resmi. Silakan login untuk memverifikasi keanggotaan grup Anda.</p>
+          <div ref={authInstance}></div>
+          {checking && <p style={{ color:t.text, marginTop:"15px" }}>Memverifikasi...</p>}
+          <button onClick={() => setDark(!dark)} style={{ marginTop:"30px", border:"none", background:"none", color:t.sub, cursor:"pointer" }}>{dark?"☀️ Light":"🌙 Dark"}</button>
+        </div>
+      </div>
+    );
+  }
 
   const session = getSession();
   return (
