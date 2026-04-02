@@ -1,9 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 
-// ==========================================
-// --- HELPER FUNCTIONS ---
-// ==========================================
-
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
 function useAnimatedNumber(target, duration = 900) {
@@ -21,11 +17,6 @@ function useAnimatedNumber(target, duration = 900) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [target, duration]);
   return val;
-}
-
-function AnimNum({ value, fmt }) {
-  const animated = useAnimatedNumber(value);
-  return <>{fmt(animated)}</>;
 }
 
 function Particles({ dark }) {
@@ -82,17 +73,12 @@ function FadeIn({ children, delay=0 }) {
   return <div ref={ref}>{children}</div>;
 }
 
-// ==========================================
-// --- MAIN COMPONENT ---
-// ==========================================
-
 export default function PivotAnalyzer() {
   const [dark, setDark] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const authInstance = useRef(null);
 
-  // Analyzer States
+  // ✅ TEST MODE: isAuthorized = true, skip login dulu
+  const [isAuthorized, setIsAuthorized] = useState(true);
+
   const [high, setHigh] = useState("");
   const [low, setLow] = useState("");
   const [close, setClose] = useState("");
@@ -110,49 +96,6 @@ export default function PivotAnalyzer() {
   };
 
   useEffect(() => { const iv = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(iv); }, []);
-
-  // Telegram Login Logic
-  useEffect(() => {
-    if (!isAuthorized) {
-      const script = document.createElement('script');
-      script.src = "https://telegram.org/js/telegram-widget.js?22";
-      script.async = true;
-      // ✅ DIPERBAIKI: pakai REACT_APP_ prefix
-      script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_NAME || "tradingstars_id_bot");
-      script.setAttribute('data-size', 'large');
-      script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-      script.setAttribute('data-request-access', 'write');
-
-      if (authInstance.current) {
-        authInstance.current.innerHTML = "";
-        authInstance.current.appendChild(script);
-      }
-      window.onTelegramAuth = (user) => handleCheckMember(user.id, user.first_name);
-    }
-  }, [isAuthorized]);
-
-  const handleCheckMember = async (userId, firstName) => {
-    setChecking(true);
-    try {
-      // ✅ DIPERBAIKI: panggil serverless function, bukan langsung ke Telegram API
-      const response = await fetch("/api/check-member", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-      const data = await response.json();
-
-      if (data.isMember) {
-        setIsAuthorized(true);
-      } else {
-        alert(`Maaf ${firstName}, kamu belum terdaftar sebagai member Trading Stars.`);
-      }
-    } catch (e) {
-      alert("Verifikasi Gagal. Pastikan Bot sudah Admin di grup.");
-    } finally {
-      setChecking(false);
-    }
-  };
 
   const hitung = () => {
     const h = parseFloat(high), l = parseFloat(low), c = parseFloat(close);
@@ -175,24 +118,6 @@ export default function PivotAnalyzer() {
 
   const fmt = (n) => n ? n.toLocaleString("id-ID") : "—";
 
-  // --- LOCK SCREEN ---
-  if (!isAuthorized) {
-    return (
-      <div style={{ minHeight:"100vh", background:t.bg, display:"flex", justifyContent:"center", alignItems:"center", padding:"20px" }}>
-        <Particles dark={dark} />
-        <div style={{ background:t.card, padding:"40px", borderRadius:"20px", textAlign:"center", border:`1px solid ${t.border}`, maxWidth:"360px", zIndex:1 }}>
-          <div style={{ fontSize:"50px", marginBottom:"15px" }}>🛡️</div>
-          <h2 style={{ color:t.text, margin:0 }}>Trading Stars</h2>
-          <p style={{ color:t.sub, fontSize:"14px", marginBottom:"30px" }}>Khusus member resmi. Silakan login untuk memverifikasi keanggotaan grup Anda.</p>
-          <div ref={authInstance}></div>
-          {checking && <p style={{ color:t.text, marginTop:"15px" }}>Memverifikasi...</p>}
-          <button onClick={() => setDark(!dark)} style={{ marginTop:"30px", border:"none", background:"none", color:t.sub, cursor:"pointer" }}>{dark?"☀️ Light":"🌙 Dark"}</button>
-        </div>
-      </div>
-    );
-  }
-
-  // --- MAIN APP ---
   const session = getSession();
   return (
     <div style={{ minHeight:"100vh", background:t.bg, display:"flex", justifyContent:"center", padding:"24px 16px", fontFamily:"sans-serif", position:"relative" }}>
@@ -213,19 +138,19 @@ export default function PivotAnalyzer() {
         </FadeIn>
 
         <div style={{ background:t.card, borderRadius:"16px", border:`1px solid ${t.border}`, padding:"20px", marginBottom:"16px" }}>
-           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"10px", marginBottom:"15px" }}>
-              {["High", "Low", "Close"].map(label => (
-                <div key={label}>
-                  <label style={{ fontSize:"11px", fontWeight:"700", color:t.sub, display:"block", marginBottom:"5px" }}>{label}</label>
-                  <input type="number" value={label === "High" ? high : label === "Low" ? low : close}
-                    onChange={(e) => label === "High" ? setHigh(e.target.value) : label === "Low" ? setLow(e.target.value) : setClose(e.target.value)}
-                    style={{ width:"100%", padding:"10px", background:t.input, border:`1px solid ${t.border}`, borderRadius:"8px", color:t.text, outline:"none", boxSizing:"border-box" }} />
-                </div>
-              ))}
-           </div>
-           <button onClick={hitung} disabled={loading} style={{ width:"100%", padding:"12px", background:"#2563eb", color:"white", border:"none", borderRadius:"10px", fontWeight:"bold", cursor:"pointer" }}>
-             {loading ? "Menghitung..." : "Hitung Pivot Point"}
-           </button>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"10px", marginBottom:"15px" }}>
+            {["High", "Low", "Close"].map(label => (
+              <div key={label}>
+                <label style={{ fontSize:"11px", fontWeight:"700", color:t.sub, display:"block", marginBottom:"5px" }}>{label}</label>
+                <input type="number" value={label === "High" ? high : label === "Low" ? low : close}
+                  onChange={(e) => label === "High" ? setHigh(e.target.value) : label === "Low" ? setLow(e.target.value) : setClose(e.target.value)}
+                  style={{ width:"100%", padding:"10px", background:t.input, border:`1px solid ${t.border}`, borderRadius:"8px", color:t.text, outline:"none", boxSizing:"border-box" }} />
+              </div>
+            ))}
+          </div>
+          <button onClick={hitung} disabled={loading} style={{ width:"100%", padding:"12px", background:"#2563eb", color:"white", border:"none", borderRadius:"10px", fontWeight:"bold", cursor:"pointer" }}>
+            {loading ? "Menghitung..." : "Hitung Pivot Point"}
+          </button>
         </div>
 
         {result && (
@@ -235,12 +160,12 @@ export default function PivotAnalyzer() {
                 <span style={{ fontSize:"12px", fontWeight:"bold", color:session.color }}>{session.name} SESSION</span>
               </div>
               <div style={{ padding:"20px" }}>
-                 {[["R3", result.r3, "#dc2626"], ["R2", result.r2, "#ef4444"], ["R1", result.r1, "#f97316"], ["PP", result.pivot, "#2563eb"], ["S1", result.s1, "#22c55e"], ["S2", result.s2, "#16a34a"], ["S3", result.s3, "#15803d"]].map(([l, v, c]) => (
-                   <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${t.border}` }}>
-                     <span style={{ fontWeight:"bold", color:c }}>{l}</span>
-                     <span style={{ color:t.text, fontWeight:"bold" }}>{fmt(v)}</span>
-                   </div>
-                 ))}
+                {[["R3", result.r3, "#dc2626"], ["R2", result.r2, "#ef4444"], ["R1", result.r1, "#f97316"], ["PP", result.pivot, "#2563eb"], ["S1", result.s1, "#22c55e"], ["S2", result.s2, "#16a34a"], ["S3", result.s3, "#15803d"]].map(([l, v, c]) => (
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${t.border}` }}>
+                    <span style={{ fontWeight:"bold", color:c }}>{l}</span>
+                    <span style={{ color:t.text, fontWeight:"bold" }}>{fmt(v)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </FadeIn>
