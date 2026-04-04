@@ -267,8 +267,8 @@ export default function PivotAnalyzer() {
   const fmtDec=(n)=>n!=null?parseFloat(n.toFixed(2)).toLocaleString("id-ID",{minimumFractionDigits:0,maximumFractionDigits:2}):"—";
 
   const t={
-    bg:dark?"#09090b":"#f1f5f9", card:dark?"rgba(17,24,39,0.5)":"rgba(255,255,255,0.7)", cardInner:dark?"rgba(15,23,42,0.6)":"rgba(241,245,249,0.7)",
-    border:dark?"rgba(99,102,241,0.2)":"rgba(255,255,255,0.4)", text:dark?"#f8fafc":"#0f172a", sub:dark?"#94a3b8":"#64748b", input:dark?"rgba(15,23,42,0.6)":"rgba(255,255,255,0.8)",
+    bg:dark?"#09090b":"#ffffff", card:dark?"rgba(17,24,39,0.5)":"rgba(255,255,255,0.7)", cardInner:dark?"rgba(15,23,42,0.6)":"rgba(241,245,249,0.7)",
+    border:dark?"rgba(99,102,241,0.2)":"rgba(255,255,255,0.5)", text:dark?"#f8fafc":"#000000", sub:dark?"#94a3b8":"#475569", input:dark?"rgba(15,23,42,0.6)":"rgba(255,255,255,0.8)",
   };
   const cardClass = "bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/30 dark:border-white/10 rounded-2xl overflow-hidden mb-3 relative transition-all duration-300 shadow-[0_8px_32px_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)]";
   const cardStyle = {};
@@ -444,7 +444,7 @@ export default function PivotAnalyzer() {
 
   return (
     <div className={dark ? "dark" : ""}>
-      <div className="min-h-screen flex justify-center p-6 relative transition-colors duration-500 bg-gray-50 dark:bg-gradient-to-br dark:from-slate-900 dark:to-black" style={{ fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
+      <div className="min-h-screen flex justify-center p-6 relative transition-colors duration-500 bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:to-black text-black dark:text-white" style={{ fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
       <Particles dark={dark} />
       <div style={{ width:"100%",maxWidth:"430px",position:"relative",zIndex:1 }}>
 
