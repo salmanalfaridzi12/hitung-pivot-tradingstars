@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "cookie": "^1.1.1",
     "dotenv": "^17.4.0",
     "html-to-image": "^1.11.13",
