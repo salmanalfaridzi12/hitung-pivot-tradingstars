@@ -579,15 +579,59 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
     });
   }
 
+  const validSetups = setups.map(s => {
+    const currentRisk = Math.abs(s.sl - s.entry);
+    let validTp = s.tp;
+    let isInvalid = false;
+
+    if (currentRisk > 0) {
+      const longTargets = [result.r1, result.r2, result.r3].filter(r => r > s.entry).sort((a,b)=>a-b);
+      const shortTargets = [result.s1, result.s2, result.s3].filter(k => k < s.entry).sort((a,b)=>b-a);
+      const targets = s.type === "LONG" ? longTargets : shortTargets;
+      
+      let found = false;
+      for (let tp of targets) {
+         let rw = Math.abs(tp - s.entry);
+         if (rw / currentRisk >= 1.5) {
+           validTp = tp;
+           found = true;
+           break;
+         }
+      }
+      if (!found) isInvalid = true;
+    } else {
+      isInvalid = true;
+    }
+
+    return { ...s, tp: validTp, originalTp: s.tp, isInvalid };
+  });
+
   return (
     <div style={{ marginBottom:"12px" }}>
       <div style={{ fontSize:"10px",fontWeight:700,color:t.sub,letterSpacing:"1px",marginBottom:"8px" }}>⚡ TRADE SETUP GENERATOR</div>
-      {setups.map((s,i) => {
-        // PERBAIKAN RUMUS RISK/REWARD (REWARD / RISK) AGAR SESUAI STANDAR INDUSTRI
+      {validSetups.map((s,i) => {
         const risk = Math.abs(s.sl - s.entry);
         const reward = Math.abs(s.tp - s.entry);
         const rr = risk > 0 ? reward / risk : 0;
         
+        if (s.isInvalid) {
+          const bgGrey = dark ? "rgba(100,116,139,0.1)" : "#f8fafc";
+          return (
+             <div key={i} style={{ background:bgGrey, border:`1px solid ${dark?"#334155":"#e2e8f0"}`, borderRadius:"12px", padding:"14px", marginBottom:"8px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
+                  <span style={{ fontSize:"11px", fontWeight:900, color:"#64748b", background:"#64748b20", padding:"2px 8px", borderRadius:"4px" }}>{s.type}</span>
+                  <span style={{ fontSize:"12px", fontWeight:700, color:t.sub }}>{s.name}</span>
+                </div>
+                <div style={{ fontSize:"12px", color:"#dc2626", fontWeight:800, marginTop:"6px", whiteSpace:"pre-wrap" }}>
+                  🚫 No Valid Setup: Risk terlalu tinggi, Reward terlalu rendah (R/R &lt; 1:1.5).
+                </div>
+                <div style={{ fontSize:"10px", color:t.sub, marginTop:"4px" }}>
+                  Sangat tidak disarankan untuk entry di posisi ini secara teknikal.
+                </div>
+             </div>
+          );
+        }
+
         const bgC = s.type === "LONG" ? (dark?"rgba(22,163,74,0.07)":"#f0fdf4") : (dark?"rgba(220,38,38,0.07)":"#fef2f2");
         return (
           <div key={i} style={{ background:bgC, border:`1px solid ${s.type==="LONG"?"#bbf7d0":"#fecaca"}`, borderRadius:"12px", padding:"14px", marginBottom:"8px" }}>
@@ -626,7 +670,7 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
                 <div style={{ fontSize:"13px", fontWeight:800, color:"#dc2626" }}>{fmt(Math.round(s.sl))} <span style={{fontSize:"9px", fontWeight:600}}>(Risk: {fmt(Math.round(risk))} pt)</span></div>
               </div>
               <div style={{ background:dark?"rgba(22,163,74,0.1)":"#f0fdf4", borderRadius:"8px", padding:"8px", border:`1px solid #bbf7d0` }}>
-                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT</div>
+                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT {s.originalTp && s.tp !== s.originalTp ? '(Escalated)' : ''}</div>
                 <div style={{ fontSize:"13px", fontWeight:800, color:"#16a34a" }}>{fmt(Math.round(s.tp))} <span style={{fontSize:"9px", fontWeight:600}}>(Win: {fmt(Math.round(reward))} pt)</span></div>
               </div>
             </div>
