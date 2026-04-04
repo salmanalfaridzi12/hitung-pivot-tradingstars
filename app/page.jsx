@@ -1,3 +1,4 @@
+"use client";
 import { useState, useRef, useEffect } from "react";
 
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
