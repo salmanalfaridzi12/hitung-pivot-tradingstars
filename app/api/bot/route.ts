@@ -65,3 +65,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Kesalahan internal webhook' }, { status: 200 });
   }
 }
+
+// Handler pengujian manual Endpoint (saat dikunjungi via browser web / GET request)
+export async function GET(req: Request) {
+  return NextResponse.json({ status: 'Webhook endpoint aktif. Silakan kirimkan format POST dari server Telegram.' }, { status: 200 });
+}
