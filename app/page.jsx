@@ -580,30 +580,77 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
   }
 
   const validSetups = setups.map(s => {
-    const currentRisk = Math.abs(s.sl - s.entry);
+    let currentRisk = Math.abs(s.sl - s.entry);
     let validTp = s.tp;
+    let validSl = s.sl;
     let isInvalid = false;
+    let isTpEscalated = false;
+    let isSlTightened = false;
 
     if (currentRisk > 0) {
-      const longTargets = [result.r1, result.r2, result.r3].filter(r => r > s.entry).sort((a,b)=>a-b);
-      const shortTargets = [result.s1, result.s2, result.s3].filter(k => k < s.entry).sort((a,b)=>b-a);
+      // Batasi target potensial maksimum hanya r2/s2 (jangan sampai r3/s3 terlalu jauh bagai mimpi)
+      const longTargets = [result.r1, result.r2].filter(r => r > s.entry).sort((a,b)=>a-b);
+      const shortTargets = [result.s1, result.s2].filter(k => k < s.entry).sort((a,b)=>b-a);
       const targets = s.type === "LONG" ? longTargets : shortTargets;
       
-      let found = false;
-      for (let tp of targets) {
-         let rw = Math.abs(tp - s.entry);
-         if (rw / currentRisk >= 1.5) {
-           validTp = tp;
-           found = true;
-           break;
-         }
+      if (targets.length === 0) {
+        isInvalid = true;
+      } else {
+        validTp = targets[0]; // PRIORITAS SELALU TARGET TERDEKAT (T1)
+        let reward = Math.abs(validTp - s.entry);
+        let rr = reward / currentRisk;
+        let minRiskAllowed = Math.max(2, Math.floor(s.entry * 0.005));
+
+        if (rr < 1.5) {
+          // Solusi Terbaik: Perketat Stop Loss (Tight SL) agar T1 tetap masuk akal untuk dicapai
+          let targetRisk = Math.floor(reward / 1.5);
+          
+          if (targetRisk >= minRiskAllowed) {
+             validSl = s.type === "LONG" ? s.entry - targetRisk : s.entry + targetRisk;
+             isSlTightened = true;
+          } else {
+             // Skenario terburuk: Entry terlalu mepet T1 (ruang gerak cuma seujung kuku), paksa lompat T2
+             if (targets.length > 1) {
+                validTp = targets[1];
+                isTpEscalated = true;
+                
+                let reward2 = Math.abs(validTp - s.entry);
+                if (reward2 / currentRisk < 1.5) {
+                   // Kalau pake T2 RR tetep jelek, coba tighten SL pakai RR T2
+                   let targetRisk2 = Math.floor(reward2 / 1.5);
+                   if (targetRisk2 >= minRiskAllowed) {
+                      validSl = s.type === "LONG" ? s.entry - targetRisk2 : s.entry + targetRisk2;
+                      isSlTightened = true;
+                   } else {
+                      isInvalid = true; // Sinyal murni busuk, batalkan!
+                   }
+                }
+             } else {
+                isInvalid = true;
+             }
+          }
+        }
       }
-      if (!found) isInvalid = true;
     } else {
       isInvalid = true;
     }
 
-    return { ...s, tp: validTp, originalTp: s.tp, isInvalid };
+    let reasonText = s.reason;
+    if (isSlTightened) {
+       reasonText = reasonText + `\n\n🛡️ Stop Loss Diperketat: Bot memotong SL awal menjadi point ${fmt(Math.round(validSl))} agar Target tetap rasional (Realistis Hit) dengan rasio minimal 1:1.5.`;
+    }
+
+    return { 
+      ...s, 
+      tp: validTp, 
+      sl: validSl, 
+      originalTp: s.tp, 
+      originalSl: s.sl, 
+      isInvalid, 
+      reason: reasonText, 
+      isTpEscalated, 
+      isSlTightened 
+    };
   });
 
   return (
@@ -665,12 +712,12 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
             </div>
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
-               <div style={{ background:dark?"rgba(220,38,38,0.1)":"#fef2f2", borderRadius:"8px", padding:"8px", border:`1px solid #fecaca` }}>
-                <div style={{ fontSize:"9px", color:"#dc2626", marginBottom:"2px", fontWeight:700 }}>🛑 STOP LOSS</div>
+               <div style={{ background:dark?"rgba(220,38,38,0.1)":"#fef2f2", borderRadius:"8px", padding:"8px", border:`1px solid ${s.isSlTightened?"#f87171":"#fecaca"}` }}>
+                <div style={{ fontSize:"9px", color:"#dc2626", marginBottom:"2px", fontWeight:700 }}>🛑 STOP LOSS {s.isSlTightened ? '(Tightened)' : ''}</div>
                 <div style={{ fontSize:"13px", fontWeight:800, color:"#dc2626" }}>{fmt(Math.round(s.sl))} <span style={{fontSize:"9px", fontWeight:600}}>(Risk: {fmt(Math.round(risk))} pt)</span></div>
               </div>
-              <div style={{ background:dark?"rgba(22,163,74,0.1)":"#f0fdf4", borderRadius:"8px", padding:"8px", border:`1px solid #bbf7d0` }}>
-                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT {s.originalTp && s.tp !== s.originalTp ? '(Escalated)' : ''}</div>
+              <div style={{ background:dark?"rgba(22,163,74,0.1)":"#f0fdf4", borderRadius:"8px", padding:"8px", border:`1px solid ${s.isTpEscalated?"#4ade80":"#bbf7d0"}` }}>
+                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT {s.isTpEscalated ? '(Escalated)' : ''}</div>
                 <div style={{ fontSize:"13px", fontWeight:800, color:"#16a34a" }}>{fmt(Math.round(s.tp))} <span style={{fontSize:"9px", fontWeight:600}}>(Win: {fmt(Math.round(reward))} pt)</span></div>
               </div>
             </div>
