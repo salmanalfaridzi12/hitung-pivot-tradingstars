@@ -97,6 +97,48 @@ function getSession() {
   return {name:"Jakarta (WIB)",color:"#8b5cf6",bg:"rgba(139,92,246,0.15)",dot:"#8b5cf6",open:open};
 }
 
+
+function GlowCard({ children, dark, style={}, className="" }) {
+  const ref = useRef(null);
+  const handleMove = (e) => {
+    const el = ref.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    el.style.setProperty("--gx", `${x}px`);
+    el.style.setProperty("--gy", `${y}px`);
+    el.style.setProperty("--go", "1");
+  };
+  const handleLeave = () => {
+    const el = ref.current; if (!el) return;
+    el.style.setProperty("--go", "0");
+  };
+  return (
+    <div
+      ref={ref}
+      className={className}
+      onMouseMove={handleMove}
+      onTouchMove={handleMove}
+      onMouseLeave={handleLeave}
+      onTouchEnd={handleLeave}
+      style={{
+        ...style,
+        position: "relative",
+        "--gx": "50%",
+        "--gy": "50%",
+        "--go": "0",
+      }}
+    >
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit", pointerEvents: "none", zIndex: 0,
+        background: `radial-gradient(160px circle at var(--gx) var(--gy), ${dark ? "rgba(139,92,246,0.18)" : "rgba(37,99,235,0.12)"} 0%, transparent 70%)`,
+        opacity: "var(--go)", transition: "opacity 0.3s ease",
+      }} />
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+    </div>
+  );
+}
+
 function FadeIn({ children, delay=0, style={} }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -109,6 +151,44 @@ function FadeIn({ children, delay=0, style={} }) {
     return () => clearTimeout(t);
   }, [delay]);
   return <div ref={ref} style={style}>{children}</div>;
+}
+
+
+
+function SpringBtn({ onClick, style, children }) {
+  const ref = useRef(null);
+  const handleClick = (e) => {
+    const el = ref.current; if (!el) return;
+    el.style.transform = "scale(0.94)";
+    setTimeout(() => {
+      el.style.transform = "scale(1.05)";
+      setTimeout(() => { el.style.transform = "scale(1)"; }, 160);
+    }, 90);
+    onClick && onClick(e);
+  };
+  return (
+    <button ref={ref} onClick={handleClick} style={{ ...style, transform: "scale(1)", transition: (style?.transition || "") + ", transform 0.15s" }}>
+      {children}
+    </button>
+  );
+}
+
+function useSpringButton() {
+  const ref = useRef(null);
+  const press = () => {
+    const el = ref.current; if (!el) return;
+    el.style.transform = "scale(0.93)";
+    el.style.transition = "transform 0.1s ease";
+    setTimeout(() => {
+      el.style.transform = "scale(1.04)";
+      el.style.transition = "transform 0.18s cubic-bezier(0.34,1.56,0.64,1)";
+      setTimeout(() => {
+        el.style.transform = "scale(1)";
+        el.style.transition = "transform 0.2s ease";
+      }, 180);
+    }, 100);
+  };
+  return { ref, press };
 }
 
 function getMarketStatus() {
@@ -637,10 +717,15 @@ export default function PivotAnalyzer() {
         </FadeIn>
 
         <FadeIn delay={90}>
-          <div style={{ display:"flex",gap:"4px",background:t.card,padding:"4px",borderRadius:"12px",marginBottom:"14px",border:`1px solid ${t.border}` }}>
-            {[["main","📊 Analisa"],["avg","🧮 Avg Down"],["history","🕐 History"],["story","📸 Story"]].map(([key,label])=>(
-              <button key={key} onClick={()=>setTab(key)} style={tabStyle(tab===key)}>{label}</button>
-            ))}
+          <div style={{ position:"relative",display:"flex",gap:"2px",background:t.card,padding:"4px",borderRadius:"12px",marginBottom:"14px",border:`1px solid ${t.border}` }}>
+            {[["main","📊 Analisa"],["avg","🧮 Avg Down"],["history","🕐 History"],["story","📸 Story"]].map(([key,label],idx)=>((
+              <button key={key} onClick={()=>setTab(key)} style={{ flex:1,padding:"9px 4px",background:"transparent",color:tab===key?"#fff":t.sub,border:"none",borderRadius:"8px",fontSize:"11px",fontWeight:700,cursor:"pointer",transition:"color 0.25s",position:"relative",zIndex:1 }}>
+                {tab===key && (
+                  <span style={{ position:"absolute",inset:0,background:dark?"#1e3a5f":"#0f172a",borderRadius:"8px",zIndex:-1,boxShadow:dark?"0 2px 10px rgba(99,102,241,0.35)":"0 2px 8px rgba(15,23,42,0.25)", animation:"tabSlide 0.25s cubic-bezier(0.22,1,0.36,1)" }} />
+                )}
+                {label}
+              </button>
+            )))}
           </div>
         </FadeIn>
 
@@ -714,10 +799,9 @@ export default function PivotAnalyzer() {
                     </div>
                   </div>
                 )}
-                <button onClick={hitung} disabled={loading}
-                  style={{ width:"100%",padding:"13px",background:loading?t.border:"linear-gradient(135deg,#1d4ed8,#7c3aed)",color:loading?t.sub:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:loading?"wait":"pointer",boxShadow:loading?"none":"0 4px 16px rgba(124,58,237,0.35)",transition:"all 0.2s" }}>
+                <SpringBtn onClick={()=>{ if(!loading) hitung(); }} style={{ width:"100%",padding:"13px",background:loading?t.border:"linear-gradient(135deg,#1d4ed8,#7c3aed)",color:loading?t.sub:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:loading?"wait":"pointer",boxShadow:loading?"none":"0 4px 16px rgba(124,58,237,0.35)" }}>
                   {loading?`Menghitung... ${progress}%`:"⟳  Hitung Pivot Point"}
-                </button>
+                </SpringBtn>
               </div>
             </div>
           </FadeIn>
@@ -921,10 +1005,9 @@ export default function PivotAnalyzer() {
                   Analisa menggunakan metode <b>Pivot Point (Floor Method)</b> untuk menentukan area support dan resistance intraday.
                 </div>
 
-                <button onClick={copyAnalisa}
-                  style={{ width:"100%",padding:"13px",background:copied?"#16a34a":"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:copied?"0 4px 14px rgba(22,163,74,0.4)":"0 4px 14px rgba(37,99,235,0.35)" }}>
+                <SpringBtn onClick={copyAnalisa} style={{ width:"100%",padding:"13px",background:copied?"#16a34a":"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:copied?"0 4px 14px rgba(22,163,74,0.4)":"0 4px 14px rgba(37,99,235,0.35)",display:"block" }}>
                   {copied ? "✅ Laporan Disalin!" : "📤 Salin & Share Analisa"}
-                </button>
+                </SpringBtn>
               </div>
             </FadeIn>
           )}
@@ -995,7 +1078,7 @@ export default function PivotAnalyzer() {
                           );
                         })}
                       </div>
-                      <button onClick={copyAvg} style={{ width:"100%",padding:"12px",marginTop:"16px",background:"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,0.35)" }}>📤 Salin & Share Kalkulasi</button>
+                      <SpringBtn onClick={copyAvg} style={{ width:"100%",padding:"12px",marginTop:"16px",background:"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",boxShadow:"0 4px 14px rgba(37,99,235,0.35)" }}>📤 Salin & Share Kalkulasi</SpringBtn>
                     </div>
                   </div>
                 </FadeIn>
@@ -1065,7 +1148,12 @@ export default function PivotAnalyzer() {
 
         <p style={{ textAlign:"center",marginTop:"16px",fontSize:"10px",color:t.sub }}>For educational use only · Pivot Analyzer Pro</p>
       </div>
-      <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.85)}}`}</style>
+      <style>{`
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.85)}}
+  @keyframes tabSlide{from{opacity:0;transform:scaleX(0.7)}to{opacity:1;transform:scaleX(1)}}
+  @keyframes fadeSlideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes countUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+`}</style>
       </div>
     </div>
   );
