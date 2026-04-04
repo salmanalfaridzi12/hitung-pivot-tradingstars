@@ -11,6 +11,9 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 // Inisialisasi object Telegraf yang akan melayani logic bot
 const bot = new Telegraf(BOT_TOKEN);
 
+// Menyimpan cache sederhana di memori Vercel untuk anti-spam (batas burst 5 detik)
+const cooldowns = new Set<number>();
+
 bot.start((ctx) => {
   ctx.reply('Selamat datang di Telegram Gatekeeper Pivot Analyzer. Silakan gunakan perintah /login.');
 });
@@ -18,17 +21,26 @@ bot.start((ctx) => {
 bot.command('login', async (ctx) => {
   try {
     const userId = ctx.from.id;
-    // Mendapatkan status anggota di dalam grup privat
-    const member = await ctx.telegram.getChatMember(GROUP_ID, userId);
     
-    // Periksa apakah peran mereka mengizinkan (bukan 'left' atau 'kicked')
-    if (['creator', 'administrator', 'member'].includes(member.status)) {
+    // Anti-spam: Tolak respon bila menekan /login terus-terusan
+    if (cooldowns.has(userId)) return;
+    cooldowns.add(userId);
+    setTimeout(() => cooldowns.delete(userId), 5000);
+
+    // Pastikan ID grup dideklarasikan dan bersih dari spasi (trim)
+    const cleanGroupId = GROUP_ID.trim();
+
+    // Mendapatkan status anggota di dalam grup privat
+    const member = await ctx.telegram.getChatMember(cleanGroupId, userId);
+    
+    // Periksa apakah peran mereka mengizinkan ('creator', 'administrator', 'member', atau 'restricted' asal bukan left/kicked)
+    if (['creator', 'administrator', 'member', 'restricted'].includes(member.status)) {
       // Pembuatan JWT untuk verifikasi session selama 5 menit
       const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '5m' });
       const loginUrl = `${SITE_URL}/api/auth?token=${token}`;
       
       // Mengirimkan tiket session dengan tombol Inline URL Telegram
-      ctx.reply(`✅ Keanggotaan VIP Dikonfirmasi.\n\nKlik layar monitor di bawah ini untuk mengakses Pivot Analyzer Pro. (Tautan ini hanya berlaku untuk 5 menit):`, {
+      ctx.reply(`✅ Keanggotaan VIP Dikonfirmasi.\n\nKlik monitor di bawah ini untuk mengakses Pivot Analyzer Pro. (Tautan berlaku 5 menit):`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🖥️ Buka Pivot Analyzer Pro", url: loginUrl }]
@@ -36,11 +48,11 @@ bot.command('login', async (ctx) => {
         }
       });
     } else {
-      ctx.reply('❌ Akses ditolak. Anda belum terdaftar sebagai anggota grup resmi TradingStars.');
+      ctx.reply(`❌ Akses ditolak. Anda terdeteksi belum berada di dalam grup.\n\n(Info Diagnostik - Status Anda di Group ID ${cleanGroupId} adalah: ${member.status})`);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error handling /login command:', error);
-    ctx.reply('❌ Terjadi kegagalan komunikasi dengan server atau Anda tidak berada di dalam grup.');
+    ctx.reply(`❌ Error Komunikasi API. Bot gagal melacak Anda.\nPastikan:\n1. Bot diculik/masuk menjadi Admin grup.\n2. GROUP_ID benar: ${GROUP_ID}\n(Pesan error teknis: ${error.message})`);
   }
 });
 
