@@ -493,11 +493,14 @@ function CandlePatternCard({ high, low, openPrice, close, t, dark, cardStyle }) 
 }
 
 function TradeSetup({ result, currentPrice, fmt, t, dark }) {
-
   if (!result || !currentPrice) return null;
   const cp = parseFloat(currentPrice); if (isNaN(cp)) return null;
   const setups = [];
-  if (Math.abs(cp-result.pivot)/result.pivot < 0.015) {
+
+  const calcDist = (level) => Math.abs(cp - level) / level;
+  const isNear = (level) => calcDist(level) < 0.015;
+
+  if (isNear(result.pivot)) {
     const isLong = cp >= result.pivot;
     setups.push({
       name: isLong ? "Bounce dari Pivot" : "Rejection di Pivot",
@@ -505,62 +508,127 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
       entry: cp,
       sl: isLong ? result.s1 : result.r1,
       tp: isLong ? result.r1 : result.s1,
-      confidence: 72,
+      confidence: Math.round(70 + (0.015 - calcDist(result.pivot)) * 1000),
       reason: isLong
-        ? "Harga bertahan di atas Pivot Point, potensi bounce naik menuju R1"
-        : "Harga gagal menembus Pivot Point, tekanan jual menuju S1",
+        ? `Harga bertahan kuat di atas Pivot (${fmt(result.pivot)}). Potensi pantulan bullish menuju Resistance 1.`
+        : `Harga gagal menembus Pivot (${fmt(result.pivot)}). Waspadai tekanan jual menuju Support 1.`,
       color: isLong ? "#16a34a" : "#dc2626"
     });
   }
-  if (cp>result.r1*0.995&&cp<result.r1*1.005) setups.push({name:"Breakout R1",type:"LONG",entry:result.r1,sl:result.pivot,tp:result.r2,tp2:result.r3,confidence:65,reason:"Harga menguji R1, potensi breakout bullish menuju R2-R3",color:"#ea580c"});
-  if (cp>result.s1*0.995&&cp<result.s1*1.008) setups.push({name:"Bounce dari S1",type:"LONG",entry:result.s1,sl:result.s2,tp:result.pivot,tp2:result.r1,confidence:68,reason:"S1 adalah support kuat, ideal untuk buy on dip",color:"#16a34a"});
-  if (cp>result.r2*0.997&&cp<result.r2*1.01) setups.push({name:"Rejection R2",type:"SHORT",entry:result.r2,sl:result.r3,tp:result.r1,tp2:result.pivot,confidence:62,reason:"R2 area resistance kuat, waspadai potensi reversal bearish",color:"#dc2626"});
-  if (cp>result.s2*0.997&&cp<result.s2*1.008) setups.push({name:"Bounce dari S2",type:"LONG",entry:result.s2,sl:result.s3,tp:result.s1,tp2:result.pivot,confidence:58,reason:"S2 support sekunder, peluang reversal jika volume mendukung",color:"#0891b2"});
-  if (setups.length===0) {
-    const up = cp >= result.pivot;
+  else if (isNear(result.r1)) {
+    const isLong = cp >= result.r1;
     setups.push({
-      name: up ? "Trend Following Long" : "Trend Following Short",
+      name: isLong ? "Breakout R1" : "Rejection R1",
+      type: isLong ? "LONG" : "SHORT",
+      entry: cp,
+      sl: isLong ? result.pivot : result.r2,
+      tp: isLong ? result.r2 : result.pivot,
+      confidence: Math.round(65 + (0.015 - calcDist(result.r1)) * 1000),
+      reason: isLong
+        ? `Berhasil menembus R1 (${fmt(result.r1)}). Sinyal kelanjutan trend naik terbuka menuju R2.`
+        : `Tertolak kuat di R1 (${fmt(result.r1)}). Aksi ambil untung berpotensi menekan harga kembali ke Pivot.`,
+      color: isLong ? "#16a34a" : "#dc2626"
+    });
+  }
+  else if (isNear(result.s1)) {
+    const isLong = cp >= result.s1;
+    setups.push({
+      name: isLong ? "Bounce di S1" : "Breakdown S1",
+      type: isLong ? "LONG" : "SHORT",
+      entry: cp,
+      sl: isLong ? result.s2 : result.pivot,
+      tp: isLong ? result.pivot : result.s2,
+      confidence: Math.round(68 + (0.015 - calcDist(result.s1)) * 1000),
+      reason: isLong
+        ? `Support 1 (${fmt(result.s1)}) sukses menahan laju penurunan. Setup ideal untuk "Buy on Dip" target Pivot.`
+        : `Support 1 tembus. Ini merupakan sinyal konfirmasi breakdown menuju area Support 2.`,
+      color: isLong ? "#16a34a" : "#dc2626"
+    });
+  }
+  else if (isNear(result.r2)) {
+    const isShort = cp <= result.r2;
+    if (isShort) setups.push({ name: "Rejection R2 Extreme", type: "SHORT", entry: cp, sl: result.r3, tp: result.r1, confidence: Math.round(63 + (0.015 - calcDist(result.r2)) * 1000), reason: `R2 (${fmt(result.r2)}) adalah area resistance keras. Sangat rentan pembalikan arah teknikal.`, color: "#dc2626" });
+  }
+  else if (isNear(result.s2)) {
+    const isLong = cp >= result.s2;
+    if (isLong) setups.push({ name: "Deep Bounce S2", type: "LONG", entry: cp, sl: result.s3, tp: result.s1, confidence: Math.round(60 + (0.015 - calcDist(result.s2)) * 1000), reason: `Terpantul di S2 (${fmt(result.s2)}). Area over-sold yang memancing rebound teknikal sesaat.`, color: "#16a34a" });
+  }
+
+  // Jatuh ke fase mengambang (Harga di tengah ruang hampa SNR)
+  if (setups.length === 0) {
+    const levels = [result.s3, result.s2, result.s1, result.pivot, result.r1, result.r2, result.r3];
+    const below = levels.filter(l => l < cp).sort((a,b) => b-a);
+    const above = levels.filter(l => l > cp).sort((a,b) => a-b);
+    
+    const supportLevel = below.length > 0 ? below[0] : result.s3;
+    const resistLevel = above.length > 0 ? above[0] : result.r3;
+
+    const up = cp >= result.pivot;
+    
+    setups.push({
+      name: "Trend Mengambang " + (up ? "(Bullish)" : "(Bearish)"),
       type: up ? "LONG" : "SHORT",
       entry: cp,
-      sl: up ? result.s1 : result.r1,
-      tp: up ? result.r1 : result.s1,
-      tp2: up ? result.r2 : result.s2,
-      confidence: 55,
-      reason: up ? "Harga di atas PP, ikuti bias bullish dengan manajemen risiko ketat" : "Harga di bawah PP, ikuti bias bearish dengan manajemen risiko ketat",
+      sl: up ? supportLevel : resistLevel,
+      tp: up ? resistLevel : supportLevel,
+      confidence: 50, 
+      reason: up 
+        ? `Harga melayang di atas Pivot. Ikuti arus naik (LONG) menuju ${fmt(resistLevel)}, namun disarankan Wait & See mengingat posisi rawan.\n\n⚠️ Invalidasi Skenario: Cut loss jika breakdown dari ${fmt(supportLevel)}.`
+        : `Harga melayang di bawah Pivot. Bias tekanan jual (SHORT) akan berlanjut menuju ${fmt(supportLevel)}.\n\n⚠️ Invalidasi Skenario: Wajib cut loss jika breakout melewati ${fmt(resistLevel)}.`,
       color: up ? "#16a34a" : "#dc2626"
     });
   }
+
   return (
     <div style={{ marginBottom:"12px" }}>
       <div style={{ fontSize:"10px",fontWeight:700,color:t.sub,letterSpacing:"1px",marginBottom:"8px" }}>⚡ TRADE SETUP GENERATOR</div>
       {setups.map((s,i) => {
-        const rr=s.tp&&s.sl?Math.abs(s.tp-s.entry)/Math.abs(s.sl-s.entry):0;
-        const bgC=s.type==="LONG"?(dark?"rgba(22,163,74,0.07)":"#f0fdf4"):(dark?"rgba(220,38,38,0.07)":"#fef2f2");
+        // PERBAIKAN RUMUS RISK/REWARD (REWARD / RISK) AGAR SESUAI STANDAR INDUSTRI
+        const risk = Math.abs(s.sl - s.entry);
+        const reward = Math.abs(s.tp - s.entry);
+        const rr = risk > 0 ? reward / risk : 0;
+        
+        const bgC = s.type === "LONG" ? (dark?"rgba(22,163,74,0.07)":"#f0fdf4") : (dark?"rgba(220,38,38,0.07)":"#fef2f2");
         return (
-          <div key={i} style={{ background:bgC,border:`1px solid ${s.type==="LONG"?"#bbf7d0":"#fecaca"}`,borderRadius:"12px",padding:"14px",marginBottom:"8px" }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px" }}>
+          <div key={i} style={{ background:bgC, border:`1px solid ${s.type==="LONG"?"#bbf7d0":"#fecaca"}`, borderRadius:"12px", padding:"14px", marginBottom:"8px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"10px" }}>
               <div>
-                <div style={{ display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px" }}>
-                  <span style={{ fontSize:"11px",fontWeight:900,color:s.color,background:`${s.color}18`,padding:"2px 8px",borderRadius:"4px" }}>{s.type}</span>
-                  <span style={{ fontSize:"12px",fontWeight:700,color:t.text }}>{s.name}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"3px" }}>
+                  <span style={{ fontSize:"11px", fontWeight:900, color:s.color, background:`${s.color}18`, padding:"2px 8px", borderRadius:"4px" }}>{s.type}</span>
+                  <span style={{ fontSize:"12px", fontWeight:700, color:t.text }}>{s.name}</span>
                 </div>
-                <div style={{ fontSize:"10px",color:t.sub,lineHeight:1.4 }}>{s.reason}</div>
+                <div style={{ fontSize:"10px", color:t.sub, lineHeight:1.5, marginTop:"6px", whiteSpace:"pre-wrap" }}>{s.reason}</div>
               </div>
-              <div style={{ textAlign:"right",flexShrink:0,marginLeft:"8px" }}>
-                <div style={{ fontSize:"9px",color:t.sub }}>CONFIDENCE</div>
-                <div style={{ fontSize:"16px",fontWeight:900,color:s.confidence>=70?"#16a34a":s.confidence>=60?"#f59e0b":"#f97316" }}>{s.confidence}%</div>
+              <div style={{ textAlign:"right", flexShrink:0, marginLeft:"12px" }}>
+                <div style={{ fontSize:"9px", color:t.sub }}>CONFIDENCE</div>
+                <div style={{ fontSize:"16px", fontWeight:900, color:s.confidence>=70?"#16a34a":s.confidence>=60?"#f59e0b":"#f97316" }}>{Math.min(99, s.confidence)}%</div>
               </div>
             </div>
-            <div style={{ height:"4px",background:dark?"#1e293b":"#e2e8f0",borderRadius:"99px",overflow:"hidden",marginBottom:"10px" }}>
-              <div style={{ height:"100%",width:`${s.confidence}%`,background:s.confidence>=70?"#16a34a":s.confidence>=60?"#f59e0b":"#f97316",borderRadius:"99px",transition:"width 0.6s ease" }} />
+            
+            <div style={{ height:"4px", background:dark?"#1e293b":"#e2e8f0", borderRadius:"99px", overflow:"hidden", marginBottom:"14px" }}>
+              <div style={{ height:"100%", width:`${Math.min(100, s.confidence)}%`, background:s.confidence>=70?"#16a34a":s.confidence>=60?"#f59e0b":"#f97316", borderRadius:"99px", transition:"width 0.6s ease" }} />
             </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px" }}>
-              {[["Entry",fmt(Math.round(s.entry)),t.text],["Stop Loss",fmt(Math.round(s.sl)),"#ef4444"],["Target 1",fmt(Math.round(s.tp)),"#16a34a"],...(s.tp2?[["Target 2",fmt(Math.round(s.tp2)),"#0891b2"]]:[]),["Risk",fmt(Math.abs(Math.round(s.entry-s.sl))),"#f59e0b"],["R/R",`1:${rr.toFixed(1)}`,"#8b5cf6"]].map(([label,val,color])=>(
-                <div key={label} style={{ background:dark?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.7)",borderRadius:"6px",padding:"6px 8px" }}>
-                  <div style={{ fontSize:"8px",color:t.sub,marginBottom:"2px" }}>{label}</div>
-                  <div style={{ fontSize:"11px",fontWeight:800,color }}>{val}</div>
-                </div>
-              ))}
+            
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", marginBottom:"8px" }}>
+              <div style={{ background:dark?"rgba(0,0,0,0.3)":"rgba(255,255,255,0.7)", borderRadius:"8px", padding:"8px", border:`1px solid ${t.border}` }}>
+                <div style={{ fontSize:"9px", color:t.sub, marginBottom:"2px", fontWeight:700 }}>🎟️ ENTRY POINT</div>
+                <div style={{ fontSize:"14px", fontWeight:900, color:t.text }}>{fmt(Math.round(s.entry))}</div>
+              </div>
+              <div style={{ background:dark?"rgba(0,0,0,0.3)":"rgba(255,255,255,0.7)", borderRadius:"8px", padding:"8px", border:`1px solid ${t.border}` }}>
+                <div style={{ fontSize:"9px", color:t.sub, marginBottom:"2px", fontWeight:700 }}>⚖️ RISK / REWARD</div>
+                <div style={{ fontSize:"14px", fontWeight:900, color:rr>=2?"#16a34a":"#f59e0b" }}>1 : {rr.toFixed(2)}</div>
+              </div>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+               <div style={{ background:dark?"rgba(220,38,38,0.1)":"#fef2f2", borderRadius:"8px", padding:"8px", border:`1px solid #fecaca` }}>
+                <div style={{ fontSize:"9px", color:"#dc2626", marginBottom:"2px", fontWeight:700 }}>🛑 STOP LOSS</div>
+                <div style={{ fontSize:"13px", fontWeight:800, color:"#dc2626" }}>{fmt(Math.round(s.sl))} <span style={{fontSize:"9px", fontWeight:600}}>(Risk: {fmt(Math.round(risk))} pt)</span></div>
+              </div>
+              <div style={{ background:dark?"rgba(22,163,74,0.1)":"#f0fdf4", borderRadius:"8px", padding:"8px", border:`1px solid #bbf7d0` }}>
+                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT</div>
+                <div style={{ fontSize:"13px", fontWeight:800, color:"#16a34a" }}>{fmt(Math.round(s.tp))} <span style={{fontSize:"9px", fontWeight:600}}>(Win: {fmt(Math.round(reward))} pt)</span></div>
+              </div>
             </div>
           </div>
         );
