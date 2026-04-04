@@ -717,8 +717,17 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
                 <div style={{ fontSize:"13px", fontWeight:800, color:"#dc2626" }}>{fmt(Math.round(s.sl))} <span style={{fontSize:"9px", fontWeight:600}}>(Risk: {fmt(Math.round(risk))} pt)</span></div>
               </div>
               <div style={{ background:dark?"rgba(22,163,74,0.1)":"#f0fdf4", borderRadius:"8px", padding:"8px", border:`1px solid ${s.isTpEscalated?"#4ade80":"#bbf7d0"}` }}>
-                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>🎯 TARGET PROFIT {s.isTpEscalated ? '(Escalated)' : ''}</div>
-                <div style={{ fontSize:"13px", fontWeight:800, color:"#16a34a" }}>{fmt(Math.round(s.tp))} <span style={{fontSize:"9px", fontWeight:600}}>(Win: {fmt(Math.round(reward))} pt)</span></div>
+                <div style={{ fontSize:"9px", color:"#16a34a", marginBottom:"2px", fontWeight:700 }}>
+                  {s.type === "SHORT" ? "🎯 TARGET BELI BALIK (Cover)" : "🎯 TARGET PROFIT"} {s.isTpEscalated ? '(Escalated)' : ''}
+                </div>
+                <div style={{ fontSize:"13px", fontWeight:800, color:"#16a34a" }}>
+                  {fmt(Math.round(s.tp))} {s.type === "SHORT" ? "↓" : "↑"} <span style={{fontSize:"9px", fontWeight:600}}>(Win: {fmt(Math.round(reward))} pt)</span>
+                </div>
+                {s.type === "SHORT" && (
+                  <div style={{ fontSize:"8px", color:"#16a34a", marginTop:"3px", opacity: 0.8 }}>
+                    *Keuntungan didapat saat harga turun ke titik ini.
+                  </div>
+                )}
               </div>
             </div>
           </div>
