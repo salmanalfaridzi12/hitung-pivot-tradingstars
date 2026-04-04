@@ -681,8 +681,9 @@ export default function PivotAnalyzer() {
   }, [stockCode, mounted]);
 
   const hitung=()=>{
-    const h=parseFloat(high),l=parseFloat(low),c=parseFloat(close);
+    let h=parseFloat(high),l=parseFloat(low),c=parseFloat(close);
     if(isNaN(h)||isNaN(l)||isNaN(c)) return;
+    if(h < l) { const temp=h; h=l; l=temp; } // Safeguard for inverted inputs
     setLoading(true);setProgress(0);setResult(null);
     let p=0; const iv=setInterval(()=>{p+=Math.random()*22+6;if(p>=100){p=100;clearInterval(iv);}setProgress(Math.min(Math.round(p),100));},45);
     setTimeout(()=>{
@@ -692,9 +693,13 @@ export default function PivotAnalyzer() {
         r1 = 2*pivot - l; r2 = pivot + (h - l); r3 = r2 + (h - l);
         s1 = 2*pivot - h; s2 = pivot - (h - l); s3 = s2 - (h - l);
       } else {
-        pivot = (h+l+c)/3;
-        r1 = 2*pivot-l; r2 = pivot+(h-l); r3 = h+2*(pivot-l);
-        s1 = 2*pivot-h; s2 = pivot-(h-l); s3 = l-2*(h-pivot);
+        pivot = (h + l + c) / 3;
+        r1 = (2 * pivot) - l;
+        s1 = (2 * pivot) - h;
+        r2 = pivot + (h - l);
+        s2 = pivot - (h - l);
+        r3 = h + 2 * (pivot - l);
+        s3 = l - 2 * (h - pivot);
       }
       const res={pivot:Math.round(pivot),r1:Math.round(r1),r2:Math.round(r2),r3:Math.round(r3),s1:Math.round(s1),s2:Math.round(s2),s3:Math.round(s3),high:h,low:l,close:c,method:pivotMethod};
       setResult(res);setLoading(false);
@@ -785,11 +790,11 @@ export default function PivotAnalyzer() {
   const levelDefs=result?[
     {label:"R3",sub:"Resistance 3",value:result.r3,color:"#9f1239",light:dark?"#4c0519":"#fff1f2",border:"#fda4af"},
     {label:"R2",sub:"Resistance 2",value:result.r2,color:"#dc2626",light:dark?"#3b0f0f":"#fef2f2",border:"#fecaca"},
-    {label:"R1",sub:"Resistance 1",value:result.r1,color:"#ea580c",light:dark?"#431407":"#fff7ed",border:"#fed7aa"},
+    {label:"R1",sub:"Resistance 1",value:result.r1,color:"#ef4444",light:dark?"#450a0a":"#fef2f2",border:"#fca5a5"},
     {label:"PP",sub:"Pivot Point", value:result.pivot,color:"#2563eb",light:dark?"#1a2f50":"#eff6ff",border:"#bfdbfe",bold:true},
     {label:"S1",sub:"Support 1",   value:result.s1,color:"#16a34a",light:dark?"#14532d":"#f0fdf4",border:"#bbf7d0"},
-    {label:"S2",sub:"Support 2",   value:result.s2,color:"#0891b2",light:dark?"#164e63":"#ecfeff",border:"#a5f3fc"},
-    {label:"S3",sub:"Support 3",   value:result.s3,color:"#7c3aed",light:dark?"#2e1065":"#f5f3ff",border:"#c4b5fd"},
+    {label:"S2",sub:"Support 2",   value:result.s2,color:"#22c55e",light:dark?"#064e3b":"#dcfce7",border:"#86efac"},
+    {label:"S3",sub:"Support 3",   value:result.s3,color:"#4ade80",light:dark?"#064e3b":"#d1fae5",border:"#4ade80"},
   ]:[];
 
   const floatPct=(()=>{ if(!result||!currentPrice||!levelDefs.length) return null; if(isNaN(cp)) return null; const max=levelDefs[0].value,min=levelDefs[6].value,range=max-min; return range>0?Math.min(Math.max(((cp-min)/range)*100,0),100):null; })();
