@@ -255,7 +255,6 @@ export default function PivotAnalyzer() {
   const [high,setHigh]=useState(""); const [low,setLow]=useState(""); const [close,setClose]=useState("");
   const [open,setOpen]=useState("");
   const [equity,setEquity]=useState(""); const [riskPct,setRiskPct]=useState("2");
-  const [alertPrice,setAlertPrice]=useState("");
   const [stockCode,setStockCode]=useState("");
   const [volume,setVolume]=useState("");
   const [ma20Volume,setMa20Volume]=useState("");
@@ -289,7 +288,7 @@ export default function PivotAnalyzer() {
   const cardClass = `backdrop-blur-md border rounded-2xl overflow-hidden mb-3 relative transition-all duration-300 ${dark ? "bg-black/40 border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]" : "bg-white/20 border-white/30 shadow-[0_8px_32px_rgba(31,38,135,0.07)]"}`;
   const cardStyle = {};
   const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1px solid ${dark ? "rgba(139,92,246,0.4)" : "rgba(34,211,238,0.5)"}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"all 0.3s",fontFamily:"inherit",boxShadow:dark?"0 0 10px rgba(139,92,246,0.2)":"0 0 12px rgba(34,211,238,0.3)"};
-  const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);setAlertPrice("");};
+  const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
   const handleStockCode = (e) => {
     const val = e.target.value.toUpperCase();
@@ -395,7 +394,7 @@ export default function PivotAnalyzer() {
         s1 = 2*pivot-h; s2 = pivot-(h-l); s3 = l-2*(h-pivot);
       }
       const res={pivot:Math.round(pivot),r1:Math.round(r1),r2:Math.round(r2),r3:Math.round(r3),s1:Math.round(s1),s2:Math.round(s2),s3:Math.round(s3),high:h,low:l,close:c,method:pivotMethod};
-      setResult(res);setLoading(false);setAlertPrice(Math.round(r1) || h);
+      setResult(res);setLoading(false);
       const entry={...res,date:new Date().toLocaleDateString("id-ID"),time:new Date().toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})};
       const updated=[entry,...history].slice(0,10); setHistory(updated);
       try{localStorage.setItem("pivot_history",JSON.stringify(updated));}catch{}
@@ -792,29 +791,7 @@ export default function PivotAnalyzer() {
           )}
 
           {result && (
-            <FadeIn delay={30}>
-              <div className={cardClass} style={{ padding:"16px", background: dark ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.3)" }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px" }}>
-                  <span style={{ fontSize:"11px",fontWeight:800,color:dark ? "#8b5cf6" : "#7c3aed",letterSpacing:"1px" }}>🔔 SET PRICE ALERT (TELEGRAM)</span>
-                </div>
-                <div style={{ marginBottom:"12px" }}>
-                  <label style={{ fontSize:"10px",fontWeight:700,color:t.sub,display:"block",marginBottom:"5px" }}>🎯 Target Harga Alert</label>
-                  <input type="number" value={alertPrice} onChange={e=>setAlertPrice(e.target.value)} placeholder="Contoh: 1550" style={{...inputStyle, background: dark? "rgba(15,23,42,0.8)" : "rgba(255,255,255,0.9)", textAlign: "center", fontSize: "16px", fontWeight: 800, padding: "12px", boxShadow: dark ? "0 0 12px rgba(139,92,246,0.3)" : "inset 0 2px 4px rgba(0,0,0,0.05)"}} />
-                </div>
-                <a href={`https://t.me/NAMA_BOT_KAMU?start=ALERT_${stockCode || "IHSG"}_${alertPrice}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                  <button style={{ width:"100%",padding:"14px",background:"linear-gradient(135deg,#8b5cf6,#6d28d9)",color:"#fff",border:"none",borderRadius:"10px",fontSize:"14px",fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(139,92,246,0.5)",transition:"all 0.2s",display:"flex",justifyContent:"center",alignItems:"center",gap:"8px",marginBottom:"8px" }}>
-                    <span style={{ textShadow:"0 0 10px rgba(255,255,255,0.8)", animation: "pulse 2s infinite" }}>🔔</span> Aktifkan Alert di Telegram
-                  </button>
-                </a>
-                <div style={{ textAlign:"center", fontSize:"9px", color:t.sub, lineHeight:1.4 }}>
-                  Cukup klik tombol di atas, lalu tekan <b>START</b> di Telegram untuk mengaktifkan notifikasi otomatis.
-                </div>
-              </div>
-            </FadeIn>
-          )}
-
-          {result && (
-            <FadeIn delay={60}>
+            <FadeIn delay={0}>
               <div style={{ marginBottom:"12px" }}>
                 <div style={{ fontSize:"10px",color:t.sub,marginBottom:"10px",padding:"8px 10px",background:dark?"rgba(37,99,235,0.08)":"#eff6ff",border:"1px solid #bfdbfe",borderRadius:"8px" }}>
                   Analisa menggunakan metode <b>Pivot Point (Floor Method)</b> untuk menentukan area support dan resistance intraday.
