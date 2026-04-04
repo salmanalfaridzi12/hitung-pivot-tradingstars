@@ -275,7 +275,11 @@ export default function PivotAnalyzer() {
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
   const handleStockCode = (e) => {
-    setStockCode(e.target.value.toUpperCase());
+    const val = e.target.value.toUpperCase();
+    setStockCode(val);
+    if (!val) {
+      setHigh(""); setLow(""); setClose(""); setOpen(""); setVolume(""); setMa20Volume(""); setCurrentPrice(""); setResult(null); setFetchStatus("");
+    }
   };
 
   const fetchStockData = async (overrideCode) => {
@@ -329,23 +333,18 @@ export default function PivotAnalyzer() {
     }
     
     if (!success) {
-      console.log(`🛑 [TwelveData] Fallback: All attempts failed for ${val}. Applying Smart Mock Data.`);
+      console.log(`🛑 [TwelveData] Fallback: All attempts failed for ${val}. Switching to Manual mode.`);
       setFetchStatus("📡 Mode: Manual (Data Bursa Tidak Tersedia)");
       
-      // Smart Mock Data for Calculator
-      const mockClose = Math.floor(Math.random() * 2000) + 1000;
-      const mockHigh = mockClose + Math.floor(Math.random() * 50) + 10;
-      const mockLow = mockClose - Math.floor(Math.random() * 50) - 10;
-      
-      setHigh(mockHigh.toString());
-      setLow(mockLow.toString());
-      setClose(mockClose.toString());
-      setCurrentPrice(mockClose.toString());
-      
-      // Set volume/ma20 to empty to indicate missing reliable data
+      // Keep UI honest: Clear fields when data is unavailable
+      setHigh("");
+      setLow("");
+      setClose("");
+      setCurrentPrice("");
       setVolume("");
       setMa20Volume("");
       setOpen("");
+      setResult(null);
     }
     setLoading(false);
   };
