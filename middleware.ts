@@ -28,6 +28,6 @@ export const config = {
      * - _next/image (optimisasi gambar)
      * - favicon.ico, dan aset public lainnya 
      */
-    '/((?!api/auth|_next/static|_next/image|access-denied|logo-tradingstars.jpg|favicon.ico).*)',
+    '/((?!api/auth|api/bot|_next/static|_next/image|access-denied|logo-tradingstars.jpg|favicon.ico).*)',
   ],
 };
