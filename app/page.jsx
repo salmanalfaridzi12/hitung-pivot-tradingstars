@@ -245,6 +245,7 @@ export default function PivotAnalyzer() {
   const [ma20Volume,setMa20Volume]=useState("");
   const [currentPrice,setCurrentPrice]=useState(""); const [result,setResult]=useState(null);
   const [loading,setLoading]=useState(false); const [progress,setProgress]=useState(0);
+  const [apiError,setApiError]=useState("");
   const [dark,setDark]=useState(false); const [copied,setCopied]=useState(false);
   const [pivotMethod,setPivotMethod]=useState("classic");
   const [history,setHistory]=useState(()=>{ try{return JSON.parse(localStorage.getItem("pivot_history")||"[]");}catch{return[];} });
@@ -266,17 +267,34 @@ export default function PivotAnalyzer() {
   };
   const cardStyle={background:t.card,borderRadius:"16px",border:`1px solid ${t.border}`,overflow:"hidden",marginBottom:"12px",position:"relative",boxShadow:dark?"0 4px 32px rgba(0,0,0,0.5)":"0 1px 4px rgba(0,0,0,0.06),0 6px 20px rgba(0,0,0,0.05)",transition:"background 0.3s, border-color 0.3s"};
   const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1.5px solid ${t.border}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",fontFamily:"inherit"};
-  const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
+  const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);setApiError("");};
 
-  const handleStockCode = (e) => {
+  const handleStockCode = async (e) => {
     const val = e.target.value.toUpperCase();
     setStockCode(val);
-    if (val.length >= 4 && !volume && !ma20Volume) {
-      const vol = Math.floor(Math.random() * 500000) + 50000;
-      const r = Math.random();
-      const ma20 = r > 0.7 ? Math.floor(vol / 1.5) : r > 0.3 ? Math.floor(vol * 1.2) : Math.floor(vol / 0.8);
-      setVolume(vol.toString());
-      setMa20Volume(ma20.toString());
+    setApiError("");
+    
+    if (val.length === 4) {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/stock?ticker=${val}`);
+        const data = await res.json();
+        
+        if (!res.ok) {
+          setApiError(data.error || 'Terjadi kesalahan saat memuat data');
+        } else {
+          setOpen(data.open?.toString() || "");
+          setHigh(data.high?.toString() || "");
+          setLow(data.low?.toString() || "");
+          setClose(data.close?.toString() || "");
+          setVolume(data.volume?.toString() || "");
+          setMa20Volume(data.ma20Volume?.toString() || "");
+          setCurrentPrice(data.close?.toString() || "");
+        }
+      } catch (err) {
+        setApiError("Gagal terhubung ke server API bursa");
+      }
+      setLoading(false);
     }
   };
 
@@ -416,9 +434,10 @@ export default function PivotAnalyzer() {
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"12px" }}>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🔠 Kode Saham (opsional)</label>
-                    <input type="text" value={stockCode} onChange={handleStockCode} placeholder="Cth: ANTM" maxLength={6} style={inputStyle}
+                    <input type="text" value={stockCode} onChange={handleStockCode} placeholder="Cth: ANTM" maxLength={6} style={{...inputStyle, borderColor: apiError ? "#ef4444" : t.border}}
                       onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
-                      onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                      onBlur={e=>{e.target.style.borderColor=apiError ? "#ef4444" : t.border;e.target.style.boxShadow="none";}} />
+                    {apiError && <div style={{ fontSize:"10px",color:"#ef4444",marginTop:"4px",fontWeight:700 }}>{apiError}</div>}
                   </div>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🎯 Harga Sekarang (opsional)</label>
