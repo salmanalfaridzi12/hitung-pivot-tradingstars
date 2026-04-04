@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   // Ambil token dari cookie tg_member_session
   const sessionCookie = request.cookies.get('tg_member_session');
 
