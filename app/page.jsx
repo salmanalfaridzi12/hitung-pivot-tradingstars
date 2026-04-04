@@ -152,7 +152,7 @@ const QUOTES = [
   "\"Jangan trading karena bosan. Trading karena ada setup yang valid.\" — TradingStars",
 ];
 
-function StoryJournal({ history, dark, t }) {
+function StoryJournal({ history, dark, t, onRecall }) {
   const today = new Date().toLocaleDateString("id-ID");
   const todayEntries = history.filter(h => h.date === today);
   const uniqueStocks = [...new Set(todayEntries.map(h => h.stockCode).filter(Boolean).filter(s => s !== "—"))];
@@ -214,19 +214,27 @@ function StoryJournal({ history, dark, t }) {
 
       {history.length > 0 && (
         <div style={{ background:cardBg, backdropFilter:"blur(12px)", border:`1px solid ${border}`, borderRadius:"16px", padding:"16px" }}>
-          <div style={{ fontSize:"10px", fontWeight:800, letterSpacing:"1.5px", color:dark?"#a5b4fc":"#6d28d9", marginBottom:"12px" }}>📈 REKAM JEJAK TERAKHIR</div>
+          <div style={{ marginBottom:"12px" }}>
+            <div style={{ fontSize:"10px", fontWeight:800, letterSpacing:"1.5px", color:dark?"#a5b4fc":"#6d28d9" }}>📈 REKAM JEJAK TERAKHIR</div>
+            <div style={{ fontSize:"9px", color:t.sub, marginTop:"2px" }}>Klik untuk lihat analisa lagi ↩</div>
+          </div>
           {history.slice(0,5).map((h,i)=>(
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom: i<4&&i<history.length-1?`1px solid ${border}`:"none" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                <div style={{ width:"28px", height:"28px", borderRadius:"8px", background:dark?"rgba(99,102,241,0.2)":"rgba(99,102,241,0.1)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10px", fontWeight:800, color:dark?"#a5b4fc":"#6d28d9" }}>{h.stockCode?h.stockCode.slice(0,3):"IDX"}</div>
+            <div key={i}
+              onClick={()=>onRecall && onRecall(h)}
+              onMouseEnter={e=>{ e.currentTarget.style.background=dark?"rgba(99,102,241,0.1)":"rgba(37,99,235,0.05)"; e.currentTarget.style.transform="translateX(4px)"; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; e.currentTarget.style.transform="translateX(0)"; }}
+              style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 10px", borderRadius:"10px", borderBottom: i<4&&i<history.length-1?`1px solid ${border}`:"none", cursor:"pointer", transition:"background 0.2s, transform 0.2s" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                <div style={{ width:"34px", height:"34px", borderRadius:"10px", background:dark?"rgba(99,102,241,0.25)":"rgba(99,102,241,0.12)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10px", fontWeight:800, color:dark?"#a5b4fc":"#6d28d9", letterSpacing:"-0.5px", flexShrink:0 }}>{h.stockCode?h.stockCode.slice(0,4):"IDX"}</div>
                 <div>
-                  <div style={{ fontSize:"12px", fontWeight:700, color:t.text }}>{h.stockCode||"—"}</div>
+                  <div style={{ fontSize:"13px", fontWeight:700, color:t.text }}>{h.stockCode||"—"}</div>
                   <div style={{ fontSize:"9px", color:t.sub }}>{h.date} · {h.time}</div>
                 </div>
               </div>
-              <div style={{ textAlign:"right" }}>
+              <div style={{ textAlign:"right", flexShrink:0 }}>
                 <div style={{ fontSize:"9px", color:t.sub }}>Pivot</div>
-                <div style={{ fontSize:"12px", fontWeight:700, color:dark?"#60a5fa":"#2563eb" }}>{h.pivot?.toLocaleString("id-ID")}</div>
+                <div style={{ fontSize:"13px", fontWeight:700, color:dark?"#60a5fa":"#2563eb" }}>{h.pivot?.toLocaleString("id-ID")}</div>
+                <div style={{ fontSize:"8px", color:dark?"#6366f1":"#7c3aed", fontWeight:600, marginTop:"1px" }}>↩ buka</div>
               </div>
             </div>
           ))}
@@ -1039,7 +1047,19 @@ export default function PivotAnalyzer() {
 
         {tab==="story" && (
           <FadeIn delay={0}>
-            <StoryJournal history={history} dark={dark} t={t} stockCode={stockCode} />
+            <StoryJournal
+              history={history}
+              dark={dark}
+              t={t}
+              stockCode={stockCode}
+              onRecall={(h) => {
+                setHigh(String(h.high));
+                setLow(String(h.low));
+                setClose(String(h.close));
+                setStockCode(h.stockCode || "");
+                setTab("main");
+              }}
+            />
           </FadeIn>
         )}
 
