@@ -139,6 +139,61 @@ function GlowCard({ children, dark, style={}, className="" }) {
   );
 }
 
+
+function Speedometer({ value, setValue, dark, t }) {
+  const getCol = (v) => v < 20 ? "#dc2626" : v < 40 ? "#ea580c" : v < 60 ? "#f59e0b" : v < 80 ? "#84cc16" : "#22c55e";
+  const getLabel = (v) => v < 20 ? "EXTREME FEAR" : v < 40 ? "FEAR" : v < 60 ? "NEUTRAL" : v < 80 ? "GREED" : "EXTREME GREED";
+  const col = getCol(value);
+  const label = getLabel(value);
+  const rot = (value / 100) * 180 - 90;
+  
+  return (
+    <div style={{ background: t.cardInner, borderRadius: "12px", padding: "14px", border: `1px solid ${col}40`, marginBottom: "14px", display: "flex", flexDirection: "column", alignItems: "center", boxShadow: `0 4px 20px ${col}15`, position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: "-50%", background: `radial-gradient(circle at top, ${col}20 0%, transparent 70%)` }} />
+      <span style={{ fontSize: "10px", fontWeight: "800", color: t.sub, letterSpacing: "1px", marginBottom: "12px", zIndex: 1 }}>MARKET SENTIMENT</span>
+      
+      <div style={{ position: "relative", width: "160px", height: "80px", overflow: "hidden", zIndex: 1 }}>
+        <div style={{ position: "absolute", top: 0, left: 0, width: "160px", height: "160px", borderRadius: "50%", border: `14px solid ${dark ? "#1e293b" : "#e2e8f0"}`, borderBottomColor: "transparent", borderRightColor: "transparent", transform: "rotate(45deg)", boxSizing: "border-box" }} />
+        <div style={{ position: "absolute", top: 0, left: 0, width: "160px", height: "160px", borderRadius: "50%", border: `14px solid ${col}`, borderBottomColor: "transparent", borderRightColor: "transparent", transform: `rotate(${rot + 45}deg)`, transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s", boxSizing: "border-box", filter: `drop-shadow(0 0 8px ${col})` }} />
+        
+        <div style={{ position: "absolute", bottom: "0", left: "50%", transform: "translateX(-50%)", width: "16px", height: "16px", background: dark ? "#333" : "#fff", borderRadius: "50%", border: `4px solid ${col}`, zIndex: 2, boxShadow: `0 0 10px ${col}` }} />
+        <div style={{ position: "absolute", bottom: "8px", left: "50%", transformOrigin: "bottom center", transform: `translateX(-50%) rotate(${rot}deg)`, width: "4px", height: "60px", background: `linear-gradient(to top, transparent, ${col})`, borderRadius: "4px", transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)", zIndex: 1 }} />
+      </div>
+      
+      <div style={{ fontSize: "14px", fontWeight: "900", color: col, marginTop: "8px", textShadow: `0 0 12px ${col}80`, zIndex: 1 }}>{label}</div>
+      
+      <input type="range" min="0" max="100" value={value} onChange={e => setValue(parseInt(e.target.value))} style={{ width: "100%", marginTop: "12px", zIndex: 1, accentColor: col }} />
+      <span style={{ fontSize: "8px", color: t.sub, marginTop: "4px", zIndex: 1 }}>Gunakan slider untuk set manual</span>
+    </div>
+  );
+}
+
+function LiveToast({ pulse, dark }) {
+  if (!pulse) return null;
+  return (
+    <div style={{ position: "fixed", bottom: "20px", left: "20px", zIndex: 9999, background: dark ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.85)", backdropFilter: "blur(8px)", border: `1px solid ${dark ? "rgba(139,92,246,0.3)" : "rgba(59,130,246,0.3)"}`, borderRadius: "12px", padding: "10px 16px", display: "flex", alignItems: "center", gap: "10px", boxShadow: dark ? "0 8px 32px rgba(139,92,246,0.2)" : "0 8px 32px rgba(59,130,246,0.2)", animation: "toastSlideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)" }}>
+      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981", animation: "pulseBadge 1.5s infinite" }} />
+      <span style={{ fontSize: "11px", fontWeight: "700", color: dark ? "#f8fafc" : "#0f172a" }}>{pulse}</span>
+    </div>
+  );
+}
+
+function CardTransitionMode({ active, dark }) {
+  if (!active) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", justifyContent: "center", alignItems: "center", background: "rgba(0,0,0,0.85)", backdropFilter: "blur(6px)", animation: "fadeInC 0.2s" }}>
+      <div style={{ width: "240px", height: "340px", background: `linear-gradient(135deg, ${dark?"#1e1b4b":"#818cf8"}, ${dark?"#0f172a":"#3b82f6"})`, borderRadius: "16px", border: "2px solid #8b5cf6", boxShadow: "0 0 50px rgba(139,92,246,0.6)", padding: "20px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", animation: "holoCard 1.2s forwards cubic-bezier(0.2, 0.8, 0.2, 1)" }}>
+        <div style={{ fontSize: "40px", marginBottom: "16px" }}>🌟</div>
+        <div style={{ fontSize: "16px", fontWeight: "900", color: "#fff", textAlign: "center", letterSpacing: "2px" }}>TRADING STARS</div>
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)", marginTop: "8px", textAlign: "center", fontWeight: "600" }}>Mengemas Analisa...</div>
+        <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.2)", borderRadius: "2px", marginTop: "24px", overflow: "hidden" }}>
+          <div style={{ width: "100%", height: "100%", background: "#fff", animation: "progressLine 0.8s ease-in-out forwards" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FadeIn({ children, delay=0, style={} }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -154,6 +209,24 @@ function FadeIn({ children, delay=0, style={} }) {
 }
 
 
+
+
+function ConfettiBurst({ particles }) {
+  if (!particles.length) return null;
+  return (
+    <div style={{ position:"fixed", top:"50%", left:"50%", pointerEvents:"none", zIndex:9999 }}>
+      {particles.map(p => (
+        <div key={p.id} style={{
+          position:"absolute", width:p.size+"px", height:p.size+"px",
+          background:p.color, borderRadius: p.id%3===0?"50%":"2px",
+          transform:"translate(-50%,-50%)",
+          animation:`confetti-fly ${p.dur}s cubic-bezier(0.25,0.46,0.45,0.94) forwards`,
+          "--cx":`${p.x}px`, "--cy":`${p.y}px`, "--cr":`${p.rot}deg`,
+        }} />
+      ))}
+    </div>
+  );
+}
 
 function SpringBtn({ onClick, style, children }) {
   const ref = useRef(null);
@@ -445,6 +518,11 @@ export default function PivotAnalyzer() {
   const [loading,setLoading]=useState(false); const [progress,setProgress]=useState(0);
   const [dark,setDark]=useState(false); const [copied,setCopied]=useState(false);
   const [pivotMethod,setPivotMethod]=useState("classic");
+  const [confetti,setConfetti]=useState([]);
+  const [shaking,setShaking]=useState(false);
+  const [sentimentVal,setSentimentVal]=useState(50);
+  const [livePulse,setLivePulse]=useState(null);
+  const [cardTransition,setCardTransition]=useState(false);
   const [history,setHistory]=useState(()=>{ try{return JSON.parse(localStorage.getItem("pivot_history")||"[]");}catch{return[];} });
 
   const [tab,setTab]=useState("main");
@@ -569,6 +647,27 @@ export default function PivotAnalyzer() {
     setLoading(false);
   };
 
+
+  useEffect(() => {
+    if(!mounted) return;
+    const messages = [
+      "🔥 Seseorang sedang analisa ANTM",
+      "🚀 Member VIP pasang strategi Avg Down BBCA",
+      "💎 Signal Strong terdeteksi hari ini!",
+      "👀 Whales sedang memantau Pivot Lvl",
+      "🤑 3 member baru saja TP di R2 BRPT",
+      "⚡ Volatilitas tinggi di IHSG sesi ini"
+    ];
+    let timeoutId;
+    const showPulse = () => {
+      setLivePulse(messages[Math.floor(Math.random() * messages.length)]);
+      setTimeout(()=>setLivePulse(null), 4000);
+      timeoutId = setTimeout(showPulse, Math.random() * 15000 + 15000);
+    };
+    timeoutId = setTimeout(showPulse, 8000);
+    return () => clearTimeout(timeoutId);
+  }, [mounted]);
+
   useEffect(() => {
     if (!mounted) return;
     const val = stockCode.toUpperCase();
@@ -599,6 +698,16 @@ export default function PivotAnalyzer() {
       }
       const res={pivot:Math.round(pivot),r1:Math.round(r1),r2:Math.round(r2),r3:Math.round(r3),s1:Math.round(s1),s2:Math.round(s2),s3:Math.round(s3),high:h,low:l,close:c,method:pivotMethod};
       setResult(res);setLoading(false);
+      // Confetti explosion
+      const particles = Array.from({length:36},(_,i)=>({
+        id:i, x:Math.random()*100-50, y:Math.random()*-80-20,
+        rot:Math.random()*720-360, color:["#f59e0b","#8b5cf6","#ec4899","#22d3ee","#f97316","#a3e635"][i%6],
+        size:Math.random()*6+4, dur:Math.random()*0.5+0.7,
+      }));
+      setConfetti(particles);
+      setTimeout(()=>setConfetti([]),1200);
+      // Screen shake
+      setShaking(true); setTimeout(()=>setShaking(false),280);
       const entry={...res,stockCode:stockCode||"—",date:new Date().toLocaleDateString("id-ID"),time:new Date().toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})};
       const updated=[entry,...history].slice(0,20); setHistory(updated);
       try{localStorage.setItem("pivot_history",JSON.stringify(updated));}catch{}
@@ -625,6 +734,13 @@ export default function PivotAnalyzer() {
 
   const copyAnalisa=()=>{
     if(!result) return;
+    setCardTransition(true);
+    setTimeout(() => {
+      setCardTransition(false);
+      executeCopyAnalisa();
+    }, 1200);
+  };
+  const executeCopyAnalisa=()=>{
     const sym = stockCode ? stockCode.toUpperCase() : "IHSG/Saham";
     let statusText = "Normal (Volume/MA20 kosong)";
     if (bandarPower) statusText = bandarPower.status;
@@ -683,7 +799,10 @@ export default function PivotAnalyzer() {
 
   return (
     <div className={dark ? "dark" : ""}>
-      <div className={`min-h-screen flex justify-center p-6 relative transition-colors duration-500 ${dark ? "bg-gradient-to-br from-slate-900 to-black text-white" : "bg-white text-black"}`} style={{ fontFamily:"'Segoe UI',system-ui,sans-serif", paddingTop: "50px" }}>
+      <div className={`min-h-screen flex justify-center p-6 relative transition-colors duration-500 ${dark ? "bg-gradient-to-br from-slate-900 to-black text-white" : "bg-white text-black"}${shaking?" animate-shake":""}`} style={{ fontFamily:"'Segoe UI',system-ui,sans-serif", paddingTop: "50px" }}>
+      <ConfettiBurst particles={confetti} />
+      <LiveToast pulse={livePulse} dark={dark} />
+      <CardTransitionMode active={cardTransition} dark={dark} />
       <div style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "8px 0", background: dark ? "rgba(0,0,0,0.6)" : "rgba(226,232,240,0.8)", backdropFilter: "blur(4px)", borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`, zIndex: 10 }}>
         <marquee scrollamount="5" style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "1px", color: dark ? "#f8fafc" : "#1e293b" }}>{getMarketStatus()}</marquee>
       </div>
@@ -730,6 +849,9 @@ export default function PivotAnalyzer() {
         </FadeIn>
 
         {tab==="main" && <>
+          <FadeIn delay={100}>
+            <Speedometer value={sentimentVal} setValue={setSentimentVal} dark={dark} t={t} />
+          </FadeIn>
           <FadeIn delay={120}>
             <div className={cardClass}>
               <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
@@ -860,14 +982,27 @@ export default function PivotAnalyzer() {
           )}
 
 
-          {levelDefs.length>0 && (
+          {levelDefs.length>0 && (() => {
+            const strength = pivotStrength?.strength || 0;
+            const isStrong = strength >= 70;
+            const isMedium = strength >= 40;
+            const badgeLabel = isStrong ? "🔥 SIGNAL STRONG" : isMedium ? "🚀 READY TO TRADE" : "📊 ANALYZING";
+            const badgeColor = isStrong ? "#f59e0b" : isMedium ? "#8b5cf6" : "#64748b";
+            const neonColor = isStrong ? "#f59e0b" : "#8b5cf6";
+            return (
             <FadeIn delay={0}>
-              <div className={cardClass}>
+              <div className={cardClass} style={{ position:"relative", overflow:"visible" }}>
+                <div style={{ position:"absolute", inset:"-2px", borderRadius:"18px", background:`linear-gradient(90deg,${neonColor},#ec4899,#22d3ee,${neonColor})`, backgroundSize:"300% 100%", animation: isStrong ? "rgbBorder 2s linear infinite" : isMedium ? "rgbBorder 3s linear infinite" : "none", zIndex:0, opacity: 0.85 }}>
+                  <div style={{ position:"absolute", inset:"2px", borderRadius:"16px", background: dark?"#09090b":"#ffffff" }} />
+                </div>
                 <HeatmapBg levels={levelDefs} currentPrice={currentPrice} dark={dark} />
                 <div style={{ position:"relative",zIndex:1 }}>
-                  <div style={{ padding:"12px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between" }}>
+                  <div style={{ padding:"12px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                     <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>PIVOT LADDER</span>
-                    <span style={{ fontSize:"11px",color:t.sub }}>7 LEVEL · HEATMAP</span>
+                    <span style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+                      <span style={{ fontSize:"10px",color:t.sub }}>7 LEVEL</span>
+                      <span style={{ fontSize:"10px",fontWeight:800,color:badgeColor,padding:"2px 8px",background:`${badgeColor}18`,borderRadius:"99px",border:`1px solid ${badgeColor}40`,animation:"pulseBadge 1.5s ease-in-out infinite" }}>{badgeLabel}</span>
+                    </span>
                   </div>
                   {levelDefs.map(({label,sub,value,color,light,border,bold},i)=>{
                     const isNearest=nearest?.nearest?.label===label, isAbove=nearest?.above?.label===label, isBelow=nearest?.below?.label===label;
@@ -921,7 +1056,8 @@ export default function PivotAnalyzer() {
                 </div>
               </div>
             </FadeIn>
-          )}
+            );
+          })()}
 
           {result && (
             <FadeIn delay={0}>
@@ -1153,6 +1289,15 @@ export default function PivotAnalyzer() {
   @keyframes tabSlide{from{opacity:0;transform:scaleX(0.7)}to{opacity:1;transform:scaleX(1)}}
   @keyframes fadeSlideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
   @keyframes countUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes rgbBorder{0%{background-position:0% 0%}100%{background-position:300% 0%}}
+  @keyframes pulseBadge{0%,100%{opacity:1;box-shadow:0 0 0 0 transparent}50%{opacity:0.85;box-shadow:0 0 10px currentColor}}
+  @keyframes screenShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+  @keyframes confetti-fly{0%{transform:translate(-50%,-50%) rotate(0deg);opacity:1}100%{transform:translate(calc(-50% + var(--cx)),calc(-50% + var(--cy))) rotate(var(--cr));opacity:0}}
+  .animate-shake{animation:screenShake 0.28s cubic-bezier(0.36,0.07,0.19,0.97) both}
+  @keyframes toastSlideUp{0%{opacity:0;transform:translateY(20px) scale(0.9)}100%{opacity:1;transform:translateY(0) scale(1)}}
+  @keyframes fadeInC{from{opacity:0}to{opacity:1}}
+  @keyframes holoCard{0%{transform:rotateY(-90deg) scale(0.8);opacity:0}40%{transform:rotateY(10deg) scale(1.05);opacity:1}60%{transform:rotateY(-5deg) scale(1)}100%{transform:rotateY(0deg) scale(1)}}
+  @keyframes progressLine{0%{width:0%}100%{width:100%}}
 `}</style>
       </div>
     </div>
