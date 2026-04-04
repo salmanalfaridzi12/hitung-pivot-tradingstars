@@ -254,8 +254,13 @@ export default function PivotAnalyzer() {
   const [session]=useState(getSession());
   const [glowLevel,setGlowLevel]=useState(null);
   const [time,setTime]=useState(new Date());
+  const [mounted,setMounted]=useState(false);
 
-  useEffect(()=>{ const iv=setInterval(()=>setTime(new Date()),1000); return ()=>clearInterval(iv); },[]);
+  useEffect(()=>{ 
+    setMounted(true);
+    const iv=setInterval(()=>setTime(new Date()),1000); 
+    return ()=>clearInterval(iv); 
+  },[]);
 
   const fmt=(n)=>n!=null?n.toLocaleString("id-ID"):"—";
   const fmtDec=(n)=>n!=null?parseFloat(n.toFixed(2)).toLocaleString("id-ID",{minimumFractionDigits:0,maximumFractionDigits:2}):"—";
@@ -268,18 +273,37 @@ export default function PivotAnalyzer() {
   const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1.5px solid ${t.border}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",fontFamily:"inherit"};
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
-  const handleStockCode = async (e) => {
-    const val = e.target.value.toUpperCase();
-    setStockCode(val);
+  const handleStockCode = (e) => {
+    setStockCode(e.target.value.toUpperCase());
+  };
 
-    if (val.length === 4) {
-      const apiKey = process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
-      if (!apiKey) return;
+  const fetchStockData = async (overrideCode) => {
+    const val = typeof overrideCode === "string" ? overrideCode.toUpperCase() : stockCode.toUpperCase();
+    if (!val || val.length < 2) return;
+    
+    const apiKey = process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+    console.log("🔑 [TwelveData] API Key Presence:", apiKey ? "AVAILABLE" : "MISSING");
+    if (!apiKey) {
+      console.warn("⚠️ [TwelveData] NEXT_PUBLIC_TWELVEDATA_API_KEY is not defined in environment variables!");
+      return;
+    }
+    
+    setLoading(true);
+    let success = false;
+    const suffixes = ["XIDX", "IDX"]; // Double suffix check
+    
+    for (const suffix of suffixes) {
+      if (success) break;
       
-      setLoading(true);
+      const symbol = val.includes(":") ? val : `${val}:${suffix}`;
+      console.log(`🌐 [TwelveData] Fetching data for: ${symbol}`);
+      
       try {
-        const res = await fetch(`https://api.twelvedata.com/time_series?symbol=${val}&interval=1day&outputsize=20&country=Indonesia&apikey=${apiKey}`);
+        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=20&apikey=${apiKey}`;
+        console.log(`📡 [TwelveData] GET request sent for ${symbol}`); 
+        const res = await fetch(url);
         const data = await res.json();
+        console.log(`📥 [TwelveData] Response for ${symbol}:`, data);
         
         if (data.status === "ok" && data.values && data.values.length > 0) {
           const latest = data.values[0];
@@ -292,13 +316,33 @@ export default function PivotAnalyzer() {
           
           const sumVolume = data.values.reduce((acc, curr) => acc + Number(curr.volume || 0), 0);
           setMa20Volume(Math.round(sumVolume / data.values.length).toString());
+          console.log(`✅ [TwelveData] Data successfully applied for ${symbol}:`, latest);
+          success = true; // Stop loop on success
+        } else {
+          console.log(`❌ [TwelveData] Data empty or unavailable for ${symbol}`);
         }
       } catch (err) {
-        // Fallback manual (silent error)
+        console.error(`💥 [TwelveData] Error fetching ${symbol}:`, err);
       }
-      setLoading(false);
     }
+    
+    if (!success) {
+      console.log(`🛑 [TwelveData] Fallback: All attempts failed for ${val}.`);
+    }
+    setLoading(false);
   };
+
+  useEffect(() => {
+    if (!mounted) return;
+    const val = stockCode.toUpperCase();
+    if (val.length === 4 && !val.includes(":")) {
+      const timeoutId = setTimeout(() => {
+        fetchStockData(val);
+      }, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockCode, mounted]);
 
   const hitung=()=>{
     const h=parseFloat(high),l=parseFloat(low),c=parseFloat(close);
@@ -378,6 +422,8 @@ export default function PivotAnalyzer() {
   const floatPct=(()=>{ if(!result||!currentPrice||!levelDefs.length) return null; if(isNaN(cp)) return null; const max=levelDefs[0].value,min=levelDefs[6].value,range=max-min; return range>0?Math.min(Math.max(((cp-min)/range)*100,0),100):null; })();
   const tabStyle=(active)=>({flex:1,padding:"9px 4px",background:active?(dark?"#1e3a5f":"#0f172a"):"transparent",color:active?"#fff":t.sub,border:"none",borderRadius:"8px",fontSize:"11px",fontWeight:700,cursor:"pointer",transition:"all 0.2s"});
 
+  if (!mounted) return null;
+
   return (
     <div style={{ minHeight:"100vh",background:t.bg,display:"flex",justifyContent:"center",padding:"24px 16px",fontFamily:"'Segoe UI',system-ui,sans-serif",transition:"background 0.4s",position:"relative" }}>
       <Particles dark={dark} />
@@ -439,9 +485,14 @@ export default function PivotAnalyzer() {
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"12px" }}>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🔠 Kode Saham (opsional)</label>
-                    <input type="text" value={stockCode} onChange={handleStockCode} placeholder="Cth: ANTM" maxLength={6} style={inputStyle}
-                      onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
-                      onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input type="text" value={stockCode} onChange={handleStockCode} onKeyDown={(e) => { if (e.key === "Enter") fetchStockData(stockCode) }} placeholder="Cth: ANTM" maxLength={6} style={{...inputStyle, flex: 1}}
+                        onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
+                        onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                      <button onClick={(e) => { e.preventDefault(); fetchStockData(stockCode); }} disabled={loading} title="Cari Data Saham" style={{ padding: "0 14px", background: "linear-gradient(135deg,#8b5cf6,#6d28d9)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "wait" : "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(139,92,246,0.3)", transition: "all 0.2s" }}>
+                        {loading ? "..." : "🔍"}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🎯 Harga Sekarang (opsional)</label>
@@ -453,13 +504,13 @@ export default function PivotAnalyzer() {
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"12px" }}>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#10b981",display:"block",marginBottom:"5px" }}>📊 Volume (Lot)</label>
-                    <input type="number" value={volume} onChange={e=>setVolume(e.target.value)} placeholder="Auto/Manual" style={inputStyle}
+                    <input type="number" value={volume} onChange={e=>setVolume(e.target.value)} placeholder={loading ? "..." : "Auto/Manual"} style={inputStyle}
                       onFocus={e=>{e.target.style.borderColor="#10b981";e.target.style.boxShadow="0 0 0 3px rgba(16,185,129,0.12)";}}
                       onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
                   </div>
                   <div>
                     <label style={{ fontSize:"11px",fontWeight:700,color:"#f59e0b",display:"block",marginBottom:"5px" }}>📉 MA20 Volume</label>
-                    <input type="number" value={ma20Volume} onChange={e=>setMa20Volume(e.target.value)} placeholder="Auto/Manual" style={inputStyle}
+                    <input type="number" value={ma20Volume} onChange={e=>setMa20Volume(e.target.value)} placeholder={loading ? "..." : "Auto/Manual"} style={inputStyle}
                       onFocus={e=>{e.target.style.borderColor="#f59e0b";e.target.style.boxShadow="0 0 0 3px rgba(245,158,11,0.12)";}}
                       onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
                   </div>
