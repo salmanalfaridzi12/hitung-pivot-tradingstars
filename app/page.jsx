@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import StoryExportCard from "../components/StoryExportCard";
 
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
@@ -571,6 +572,7 @@ function TradeSetup({ result, currentPrice, fmt, t, dark }) {
 export default function PivotAnalyzer() {
   const [high,setHigh]=useState(""); const [low,setLow]=useState(""); const [close,setClose]=useState("");
   const [open,setOpen]=useState("");
+  const [stockCode,setStockCode]=useState("");
   const [currentPrice,setCurrentPrice]=useState(""); const [result,setResult]=useState(null);
   const [loading,setLoading]=useState(false); const [progress,setProgress]=useState(0);
   const [dark,setDark]=useState(false); const [copied,setCopied]=useState(false);
@@ -707,7 +709,7 @@ export default function PivotAnalyzer() {
 
         <FadeIn delay={90}>
           <div style={{ display:"flex",gap:"4px",background:t.card,padding:"4px",borderRadius:"12px",marginBottom:"14px",border:`1px solid ${t.border}` }}>
-            {[["main","📊 Analisa"],["avg","🧮 Avg Down"],["history","🕐 History"]].map(([key,label])=>(
+            {[["main","📊 Analisa"],["avg","🧮 Avg Down"],["history","🕐 History"],["story","📸 Story"]].map(([key,label])=>(
               <button key={key} onClick={()=>setTab(key)} style={tabStyle(tab===key)}>{label}</button>
             ))}
           </div>
@@ -731,11 +733,19 @@ export default function PivotAnalyzer() {
                     </div>
                   ))}
                 </div>
-                <div style={{ marginBottom:"12px" }}>
-                  <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🎯 Harga Sekarang (opsional)</label>
-                  <input type="number" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="Aktifkan semua fitur analisa" style={inputStyle}
-                    onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
-                    onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"12px" }}>
+                  <div>
+                    <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🔠 Kode Saham (opsional)</label>
+                    <input type="text" value={stockCode} onChange={e=>setStockCode(e.target.value.toUpperCase())} placeholder="Cth: ANTM" maxLength={6} style={inputStyle}
+                      onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
+                      onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:"11px",fontWeight:700,color:"#8b5cf6",display:"block",marginBottom:"5px" }}>🎯 Harga Sekarang (opsional)</label>
+                    <input type="number" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="Aktivator Semua Fitur" style={inputStyle}
+                      onFocus={e=>{e.target.style.borderColor="#8b5cf6";e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.12)";}}
+                      onBlur={e=>{e.target.style.borderColor=t.border;e.target.style.boxShadow="none";}} />
+                  </div>
                 </div>
                 {loading && (
                   <div style={{ marginBottom:"12px" }}>
@@ -1090,6 +1100,22 @@ export default function PivotAnalyzer() {
                 ))
               }
             </div>
+          </FadeIn>
+        )}
+
+        {tab==="story" && (
+          <FadeIn delay={0}>
+            {result ? (
+              <StoryExportCard 
+                result={result} 
+                stockCode={stockCode || "IHSG"} 
+                date={new Date().toLocaleDateString("id-ID", {day:"2-digit",month:"short",year:"numeric"})} 
+              />
+            ) : (
+              <div style={{ textAlign:"center",padding:"40px 20px",color:t.sub,fontSize:"13px", ...cardStyle }}>
+                Silakan isi Data OHLC dan Hitung Pivot terlebih dahulu untuk membuat Story 📸
+              </div>
+            )}
           </FadeIn>
         )}
 

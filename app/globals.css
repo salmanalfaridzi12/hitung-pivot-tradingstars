@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Gabungan src/index.css & src/App.css untuk Next.js */
 
 body {
