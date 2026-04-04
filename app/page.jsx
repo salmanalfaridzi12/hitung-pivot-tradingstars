@@ -89,13 +89,12 @@ function HeatmapBg({ levels, currentPrice, dark }) {
 }
 
 function getSession() {
-  const h = new Date().getUTCHours();
-  if (h>=0&&h<7)   return {name:"WIB",      color:"#f59e0b",bg:"rgba(245,158,11,0.1)", dot:"#f59e0b",open:true};
-  if (h>=7&&h<8)   return {name:"TK-LN Overlap",color:"#8b5cf6",bg:"rgba(139,92,246,0.1)",dot:"#8b5cf6",open:true};
-  if (h>=8&&h<16)  return {name:"London",     color:"#3b82f6",bg:"rgba(59,130,246,0.1)",  dot:"#3b82f6",open:true};
-  if (h>=13&&h<16) return {name:"LN-NY Overlap",color:"#ec4899",bg:"rgba(236,72,153,0.1)",dot:"#ec4899",open:true};
-  if (h>=16&&h<21) return {name:"New York",   color:"#22c55e",bg:"rgba(34,197,94,0.1)",   dot:"#22c55e",open:true};
-  return {name:"Market Closed",color:"#64748b",bg:"rgba(100,116,139,0.07)",dot:"#64748b",open:false};
+  const d = new Date();
+  const options = { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false };
+  const hText = d.toLocaleString('en-US', options);
+  const h = parseInt(hText, 10);
+  const open = h >= 9 && h < 16;
+  return {name:"Jakarta (WIB)",color:"#8b5cf6",bg:"rgba(139,92,246,0.15)",dot:"#8b5cf6",open:open};
 }
 
 function FadeIn({ children, delay=0, style={} }) {
@@ -240,6 +239,7 @@ function getBandarPower(cp, open, close, volume, ma20) {
 export default function PivotAnalyzer() {
   const [high,setHigh]=useState(""); const [low,setLow]=useState(""); const [close,setClose]=useState("");
   const [open,setOpen]=useState("");
+  const [equity,setEquity]=useState(""); const [riskPct,setRiskPct]=useState("2");
   const [stockCode,setStockCode]=useState("");
   const [volume,setVolume]=useState("");
   const [ma20Volume,setMa20Volume]=useState("");
@@ -267,10 +267,10 @@ export default function PivotAnalyzer() {
   const fmtDec=(n)=>n!=null?parseFloat(n.toFixed(2)).toLocaleString("id-ID",{minimumFractionDigits:0,maximumFractionDigits:2}):"—";
 
   const t={
-    bg:dark?"#080e1a":"#f0f4f8", card:dark?"#111827":"#ffffff", cardInner:dark?"#0d1520":"#f8fafc",
-    border:dark?"#1e2d42":"#e2e8f0", text:dark?"#f0f6ff":"#0f172a", sub:dark?"#7a92b0":"#64748b", input:dark?"#080e1a":"#f8fafc",
+    bg:dark?"#09090b":"#f1f5f9", card:dark?"rgba(17,24,39,0.5)":"rgba(255,255,255,0.7)", cardInner:dark?"rgba(15,23,42,0.6)":"rgba(241,245,249,0.7)",
+    border:dark?"rgba(99,102,241,0.2)":"rgba(255,255,255,0.4)", text:dark?"#f8fafc":"#0f172a", sub:dark?"#94a3b8":"#64748b", input:dark?"rgba(15,23,42,0.6)":"rgba(255,255,255,0.8)",
   };
-  const cardStyle={background:t.card,borderRadius:"16px",border:`1px solid ${t.border}`,overflow:"hidden",marginBottom:"12px",position:"relative",boxShadow:dark?"0 4px 32px rgba(0,0,0,0.5)":"0 1px 4px rgba(0,0,0,0.06),0 6px 20px rgba(0,0,0,0.05)",transition:"background 0.3s, border-color 0.3s"};
+  const cardStyle={background:t.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderRadius:"16px",border:`1px solid ${t.border}`,overflow:"hidden",marginBottom:"12px",position:"relative",boxShadow:dark?"0 8px 32px rgba(0,0,0,0.5)":"0 8px 32px rgba(31,38,135,0.07)",transition:"background 0.3s, border-color 0.3s, box-shadow 0.3s"};
   const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1.5px solid ${t.border}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",fontFamily:"inherit"};
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
@@ -455,7 +455,9 @@ export default function PivotAnalyzer() {
                 <div style={{ fontSize:"10px",color:t.sub }}>Classical Floor Method · R3/S3</div>
               </div>
             </div>
-            <button onClick={()=>setDark(d=>!d)} style={{ padding:"7px 14px",background:t.card,border:`1px solid ${t.border}`,borderRadius:"20px",cursor:"pointer",fontSize:"13px",color:t.text }}>{dark?"☀️":"🌙"}</button>
+            <button onClick={()=>setDark(d=>!d)} style={{ padding:"7px 14px",background:dark?"rgba(139,92,246,0.15)":t.card,border:`1px solid ${dark?"rgba(139,92,246,0.4)":t.border}`,borderRadius:"20px",cursor:"pointer",fontSize:"13px",color:t.text,boxShadow:dark?"0 0 10px rgba(139,92,246,0.3)":"none",transition:"all 0.3s" }}>
+              {dark?"☀️ LIGHT":"🌙 DARK"}
+            </button>
           </div>
         </FadeIn>
 
@@ -466,7 +468,7 @@ export default function PivotAnalyzer() {
               <span style={{ fontSize:"12px",fontWeight:700,color:session.color }}>{session.name}</span>
               <span style={{ fontSize:"10px",color:t.sub }}>{session.open?"• OPEN":"• CLOSED"}</span>
             </div>
-            <span style={{ fontSize:"11px",fontWeight:700,color:t.sub }}>{time.toLocaleTimeString("id-ID")}</span>
+            <span style={{ fontSize:"11px",fontWeight:700,color:t.sub }}>{time.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</span>
           </div>
         </FadeIn>
 
@@ -673,7 +675,80 @@ export default function PivotAnalyzer() {
             </FadeIn>
           )}
 
-
+          {result && (
+            <FadeIn delay={0}>
+              <div style={{ ...cardStyle,padding:"14px 16px" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px" }}>
+                  <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>⚖️ TRADING PLAN OPTIMIZER</span>
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 80px",gap:"10px",marginBottom:"12px" }}>
+                  <div>
+                    <label style={{ fontSize:"10px",fontWeight:700,color:"#10b981",display:"block",marginBottom:"5px" }}>💵 Modal / Equity</label>
+                    <input type="number" value={equity} onChange={e=>setEquity(e.target.value)} placeholder="Contoh: 10000000" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:"10px",fontWeight:700,color:"#ef4444",display:"block",marginBottom:"5px" }}>Risk (%)</label>
+                    <input type="number" value={riskPct} onChange={e=>setRiskPct(e.target.value)} placeholder="1-2" style={inputStyle} />
+                  </div>
+                </div>
+                
+                {(() => {
+                  const eq = parseFloat(equity);
+                  const risk = parseFloat(riskPct);
+                  if (isNaN(eq) || isNaN(risk) || eq <= 0 || risk <= 0) {
+                    return <div style={{ fontSize:"10px",color:t.sub }}>Masukkan Modal dan Risk (%) untuk melihat Trading Plan.</div>;
+                  }
+                  
+                  const maxLossRp = eq * (risk / 100);
+                  const entryPrice = parseFloat(currentPrice) || result.pivot;
+                  const slPrice = result.s1;
+                  const tpPrice = result.r1;
+                  
+                  if (entryPrice <= slPrice) return <div style={{ fontSize:"10px",color:t.sub }}>Harga Entry saat ini berada di bawah Support (SL). Trading plan tidak valid.</div>;
+                  
+                  const lossPerShare = entryPrice - slPrice;
+                  const maxShares = maxLossRp / lossPerShare;
+                  const lotSize = Math.floor(maxShares / 100);
+                  
+                  if (lotSize <= 0) return <div style={{ fontSize:"10px",color:t.sub }}>Risk terlalu kecil atau jarak SL terlalu lebar untuk beli 1 lot.</div>;
+                  
+                  const actualRisk = (lotSize * 100) * lossPerShare;
+                  const potentialProfit = (lotSize * 100) * (tpPrice - entryPrice);
+                  const rrRatio = potentialProfit > 0 ? (potentialProfit / actualRisk).toFixed(2) : 0;
+                  
+                  return (
+                    <div style={{ background:t.cardInner,border:`1px solid ${t.border}`,borderRadius:"10px",padding:"12px" }}>
+                      <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"8px",borderBottom:`1px solid ${t.border}`,paddingBottom:"8px" }}>
+                        <div>
+                          <div style={{ fontSize:"9px",color:t.sub }}>MAX LOT</div>
+                          <div style={{ fontSize:"16px",fontWeight:900,color:"#8b5cf6" }}>{lotSize} Lot</div>
+                        </div>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontSize:"9px",color:t.sub }}>R/R RATIO</div>
+                          <div style={{ fontSize:"16px",fontWeight:900,color:rrRatio >= 2 ? "#16a34a" : "#f59e0b" }}>1 : {rrRatio}</div>
+                        </div>
+                      </div>
+                      <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"10px" }}>
+                        <div>
+                          <div style={{ fontSize:"9px",color:t.sub }}>STOP LOSS (S1)</div>
+                          <div style={{ fontSize:"12px",fontWeight:800,color:"#ef4444" }}>Rp {fmt(slPrice)} <span style={{fontSize:"10px",fontWeight:400}}>(-Rp {fmt(actualRisk)})</span></div>
+                        </div>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontSize:"9px",color:t.sub }}>TAKE PROFIT (R1)</div>
+                          <div style={{ fontSize:"12px",fontWeight:800,color:"#10b981" }}>Rp {fmt(tpPrice)} <span style={{fontSize:"10px",fontWeight:400}}>(+Rp {fmt(potentialProfit)})</span></div>
+                        </div>
+                      </div>
+                      
+                      <div style={{ height:"6px",background:"#ef4444",borderRadius:"99px",display:"flex",overflow:"hidden" }}>
+                        <div style={{ height:"100%",width:`${(1 / (1 + parseFloat(rrRatio))) * 100}%`,background:"#ef4444" }} />
+                        <div style={{ height:"100%",flex:1,background:"#10b981" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </FadeIn>
+          )}
 
           {result && (
             <FadeIn delay={0}>
