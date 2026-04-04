@@ -268,8 +268,36 @@ export default function PivotAnalyzer() {
   const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1.5px solid ${t.border}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",fontFamily:"inherit"};
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
-  const handleStockCode = (e) => {
-    setStockCode(e.target.value.toUpperCase());
+  const handleStockCode = async (e) => {
+    const val = e.target.value.toUpperCase();
+    setStockCode(val);
+
+    if (val.length === 4) {
+      const apiKey = process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
+      if (!apiKey) return;
+      
+      setLoading(true);
+      try {
+        const res = await fetch(`https://api.twelvedata.com/time_series?symbol=${val}&interval=1day&outputsize=20&country=Indonesia&apikey=${apiKey}`);
+        const data = await res.json();
+        
+        if (data.status === "ok" && data.values && data.values.length > 0) {
+          const latest = data.values[0];
+          setOpen(latest.open || "");
+          setHigh(latest.high || "");
+          setLow(latest.low || "");
+          setClose(latest.close || "");
+          setVolume(latest.volume || "");
+          setCurrentPrice(latest.close || "");
+          
+          const sumVolume = data.values.reduce((acc, curr) => acc + Number(curr.volume || 0), 0);
+          setMa20Volume(Math.round(sumVolume / data.values.length).toString());
+        }
+      } catch (err) {
+        // Fallback manual (silent error)
+      }
+      setLoading(false);
+    }
   };
 
   const hitung=()=>{
