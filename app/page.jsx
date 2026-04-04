@@ -141,6 +141,101 @@ function SlideIn({ children, delay=0 }) {
 }
 
 
+const QUOTES = [
+  "\"Disiplin adalah jembatan antara tujuan dan pencapaian.\" — Jim Rohn",
+  "\"Pasar tidak peduli kamu butuh keuntungan. Ikuti sistem.\" — Ed Seykota",
+  "\"Trader terbaik bukan yang paling sering menang, tapi yang ruginya paling kecil saat salah.\" — Paul Tudor Jones",
+  "\"Sabar adalah senjata paling rahasia di pasar modal.\" — Jesse Livermore",
+  "\"Setiap analisa yang baik adalah modal masa depan.\" — TradingStars",
+  "\"Risk management adalah fondasi profit yang berkelanjutan.\" — Warren Buffett",
+  "\"Kenali sahammu seperti kamu mengenal dirimu sendiri.\" — Peter Lynch",
+  "\"Jangan trading karena bosan. Trading karena ada setup yang valid.\" — TradingStars",
+];
+
+function StoryJournal({ history, dark, t }) {
+  const today = new Date().toLocaleDateString("id-ID");
+  const todayEntries = history.filter(h => h.date === today);
+  const uniqueStocks = [...new Set(todayEntries.map(h => h.stockCode).filter(Boolean).filter(s => s !== "—"))];
+  const mostAnalyzed = uniqueStocks.length > 0
+    ? uniqueStocks.reduce((a, b) =>
+        todayEntries.filter(h=>h.stockCode===a).length >= todayEntries.filter(h=>h.stockCode===b).length ? a : b
+      )
+    : null;
+  const quote = QUOTES[new Date().getDate() % QUOTES.length];
+  const totalDays = [...new Set(history.map(h=>h.date))].length;
+
+  const cardBg = dark ? "rgba(15,23,42,0.6)" : "rgba(255,255,255,0.7)";
+  const border = dark ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.5)";
+
+  return (
+    <div>
+      <div style={{ background:cardBg, backdropFilter:"blur(12px)", border:`1px solid ${border}`, borderRadius:"16px", padding:"20px", marginBottom:"12px" }}>
+        <div style={{ fontSize:"10px", fontWeight:800, letterSpacing:"1.5px", color:dark?"#a5b4fc":"#6d28d9", marginBottom:"14px" }}>📖 TRADING JOURNAL HARI INI</div>
+
+        {todayEntries.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"20px 0", color:t.sub, fontSize:"13px" }}>
+            Belum ada analisa hari ini.<br/>Yuk mulai analisa sahammu! 🚀
+          </div>
+        ) : (
+          <>
+            <div style={{ background:dark?"rgba(139,92,246,0.1)":"rgba(109,40,217,0.06)", border:`1px solid ${dark?"rgba(139,92,246,0.2)":"rgba(109,40,217,0.1)"}`, borderRadius:"12px", padding:"14px 16px", marginBottom:"14px" }}>
+              <div style={{ fontSize:"13px", color:t.text, lineHeight:1.7 }}>
+                Hari ini kamu sudah menganalisa <span style={{ fontWeight:800, color:dark?"#a5b4fc":"#6d28d9" }}>{todayEntries.length} saham</span>.
+                {uniqueStocks.length > 0 && (
+                  <> Kode yang dianalisa: <span style={{ fontWeight:800, color:dark?"#34d399":"#059669" }}>{uniqueStocks.map(s=>`$${s}`).join(", ")}</span>.</>
+                )}
+                {mostAnalyzed && todayEntries.filter(h=>h.stockCode===mostAnalyzed).length > 1 && (
+                  <> Saham yang paling sering kamu pantau adalah <span style={{ fontWeight:800, color:dark?"#fbbf24":"#d97706" }}>${mostAnalyzed}</span>.</>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", marginBottom:"14px" }}>
+              {[
+                ["📊 Analisa Hari Ini", `${todayEntries.length}x`, "#6d28d9"],
+                ["📅 Total Hari", `${totalDays} hari`, "#0891b2"],
+                ["🏷️ Saham Unik", `${uniqueStocks.length} emiten`, "#16a34a"],
+                ["💾 Total Tersimpan", `${history.length}/20`, "#f59e0b"],
+              ].map(([label, val, color])=>(
+                <div key={label} style={{ background:t.cardInner??dark?"rgba(15,23,42,0.6)":"rgba(241,245,249,0.7)", border:`1px solid ${border}`, borderRadius:"10px", padding:"10px 12px" }}>
+                  <div style={{ fontSize:"9px", color:t.sub, marginBottom:"3px" }}>{label}</div>
+                  <div style={{ fontSize:"16px", fontWeight:900, color }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ background:dark?"rgba(245,158,11,0.08)":"rgba(245,158,11,0.06)", border:`1px solid ${dark?"rgba(245,158,11,0.25)":"rgba(245,158,11,0.2)"}`, borderRadius:"10px", padding:"12px 14px" }}>
+          <div style={{ fontSize:"9px", fontWeight:700, color:"#f59e0b", marginBottom:"5px", letterSpacing:"1px" }}>💡 QUOTE OF THE DAY</div>
+          <div style={{ fontSize:"11px", color:t.text, lineHeight:1.6, fontStyle:"italic" }}>{quote}</div>
+        </div>
+      </div>
+
+      {history.length > 0 && (
+        <div style={{ background:cardBg, backdropFilter:"blur(12px)", border:`1px solid ${border}`, borderRadius:"16px", padding:"16px" }}>
+          <div style={{ fontSize:"10px", fontWeight:800, letterSpacing:"1.5px", color:dark?"#a5b4fc":"#6d28d9", marginBottom:"12px" }}>📈 REKAM JEJAK TERAKHIR</div>
+          {history.slice(0,5).map((h,i)=>(
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom: i<4&&i<history.length-1?`1px solid ${border}`:"none" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                <div style={{ width:"28px", height:"28px", borderRadius:"8px", background:dark?"rgba(99,102,241,0.2)":"rgba(99,102,241,0.1)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10px", fontWeight:800, color:dark?"#a5b4fc":"#6d28d9" }}>{h.stockCode?h.stockCode.slice(0,3):"IDX"}</div>
+                <div>
+                  <div style={{ fontSize:"12px", fontWeight:700, color:t.text }}>{h.stockCode||"—"}</div>
+                  <div style={{ fontSize:"9px", color:t.sub }}>{h.date} · {h.time}</div>
+                </div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:"9px", color:t.sub }}>Pivot</div>
+                <div style={{ fontSize:"12px", fontWeight:700, color:dark?"#60a5fa":"#2563eb" }}>{h.pivot?.toLocaleString("id-ID")}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getPivotStrength(result) {
   if (!result) return null;
   const rangeTotal = result.r3 - result.s3 || 1;
@@ -416,8 +511,8 @@ export default function PivotAnalyzer() {
       }
       const res={pivot:Math.round(pivot),r1:Math.round(r1),r2:Math.round(r2),r3:Math.round(r3),s1:Math.round(s1),s2:Math.round(s2),s3:Math.round(s3),high:h,low:l,close:c,method:pivotMethod};
       setResult(res);setLoading(false);
-      const entry={...res,date:new Date().toLocaleDateString("id-ID"),time:new Date().toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})};
-      const updated=[entry,...history].slice(0,10); setHistory(updated);
+      const entry={...res,stockCode:stockCode||"—",date:new Date().toLocaleDateString("id-ID"),time:new Date().toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})};
+      const updated=[entry,...history].slice(0,20); setHistory(updated);
       try{localStorage.setItem("pivot_history",JSON.stringify(updated));}catch{}
     },700);
   };
@@ -905,24 +1000,35 @@ export default function PivotAnalyzer() {
           <FadeIn delay={0}>
             <div className={cardClass}>
               <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>🕐 RIWAYAT KALKULASI</span>
-                {history.length>0&&<button onClick={()=>{setHistory([]);try{localStorage.removeItem("pivot_history");}catch{}}} style={{ fontSize:"10px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"2px 8px",cursor:"pointer",fontWeight:700 }}>Hapus Semua</button>}
+                <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>🕐 RIWAYAT ANALISA ({history.length}/20)</span>
+                {history.length>0&&<button onClick={()=>{setHistory([]);try{localStorage.removeItem("pivot_history");}catch{}}} style={{ fontSize:"10px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"2px 8px",cursor:"pointer",fontWeight:700 }}>🗑️ Hapus Semua</button>}
               </div>
               {history.length===0
-                ? <div style={{ textAlign:"center",padding:"40px 20px",color:t.sub,fontSize:"13px" }}>Belum ada riwayat 📭</div>
+                ? <div style={{ textAlign:"center",padding:"40px 20px",color:t.sub,fontSize:"13px" }}>Belum ada riwayat. Analisa dulu sahamnya! 📭</div>
                 : history.map((h,i)=>(
-                  <div key={i} style={{ padding:"13px 16px",borderBottom:i<history.length-1?`1px solid ${t.border}`:"none" }}>
-                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:"8px" }}>
-                      <span style={{ fontSize:"11px",fontWeight:700,color:t.text }}>H:{fmt(Math.round(h.high))} L:{fmt(Math.round(h.low))} C:{fmt(Math.round(h.close))}</span>
-                      <span style={{ fontSize:"10px",color:t.sub }}>{h.date} {h.time}</span>
+                  <div key={i}
+                    onClick={()=>{
+                      setHigh(String(h.high)); setLow(String(h.low)); setClose(String(h.close));
+                      setStockCode(h.stockCode||"")
+                      setTab("main");
+                    }}
+                    style={{ padding:"12px 16px",borderBottom:i<history.length-1?`1px solid ${t.border}`:"none",cursor:"pointer",transition:"background 0.2s" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=dark?"rgba(255,255,255,0.04)":"rgba(37,99,235,0.04)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px" }}>
+                      <span style={{ fontSize:"13px",fontWeight:800,color:dark?"#a5b4fc":"#2563eb" }}>{h.stockCode||"—"}</span>
+                      <span style={{ fontSize:"9px",color:t.sub }}>{h.date} · {h.time}</span>
                     </div>
-                    <div style={{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"4px" }}>
-                      {[["R3",h.r3,"#9f1239"],["R2",h.r2,"#dc2626"],["R1",h.r1,"#ea580c"],["PP",h.pivot,"#2563eb"],["S1",h.s1,"#16a34a"],["S2",h.s2,"#0891b2"],["S3",h.s3,"#7c3aed"]].map(([label,val,color])=>(
-                        <div key={label} style={{ textAlign:"center",padding:"5px 3px",background:t.cardInner,borderRadius:"6px",border:`1px solid ${t.border}` }}>
-                          <div style={{ fontSize:"8px",fontWeight:700,color }}>{label}</div>
-                          <div style={{ fontSize:"9px",fontWeight:700,color:t.text }}>{fmt(val)}</div>
-                        </div>
-                      ))}
+                    <div style={{ display:"flex",gap:"8px",alignItems:"center",justifyContent:"space-between" }}>
+                      <div style={{ display:"flex",gap:"5px" }}>
+                        {[["PP",h.pivot,"#2563eb"],["R1",h.r1,"#ea580c"],["S1",h.s1,"#16a34a"]].map(([label,val,color])=>(
+                          <div key={label} style={{ textAlign:"center",padding:"4px 8px",background:t.cardInner,borderRadius:"6px",border:`1px solid ${t.border}` }}>
+                            <div style={{ fontSize:"8px",fontWeight:700,color }}>{label}</div>
+                            <div style={{ fontSize:"10px",fontWeight:700,color:t.text }}>{val?.toLocaleString("id-ID")}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <span style={{ fontSize:"9px",color:t.sub,fontStyle:"italic" }}>tap to recall ↩</span>
                     </div>
                   </div>
                 ))
@@ -933,17 +1039,7 @@ export default function PivotAnalyzer() {
 
         {tab==="story" && (
           <FadeIn delay={0}>
-            {result ? (
-              <StoryExportCard 
-                result={result} 
-                stockCode={stockCode || "IHSG"} 
-                date={new Date().toLocaleDateString("id-ID", {day:"2-digit",month:"short",year:"numeric"})} 
-              />
-            ) : (
-              <div className={cardClass} style={{ textAlign:"center", padding:"40px 20px", color:t.sub, fontSize:"13px" }}>
-                Silakan isi Data OHLC dan Hitung Pivot terlebih dahulu untuk membuat Story 📸
-              </div>
-            )}
+            <StoryJournal history={history} dark={dark} t={t} stockCode={stockCode} />
           </FadeIn>
         )}
 
