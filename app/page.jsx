@@ -270,8 +270,9 @@ export default function PivotAnalyzer() {
     bg:dark?"#09090b":"#f1f5f9", card:dark?"rgba(17,24,39,0.5)":"rgba(255,255,255,0.7)", cardInner:dark?"rgba(15,23,42,0.6)":"rgba(241,245,249,0.7)",
     border:dark?"rgba(99,102,241,0.2)":"rgba(255,255,255,0.4)", text:dark?"#f8fafc":"#0f172a", sub:dark?"#94a3b8":"#64748b", input:dark?"rgba(15,23,42,0.6)":"rgba(255,255,255,0.8)",
   };
-  const cardStyle={background:t.card,backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderRadius:"16px",border:`1px solid ${t.border}`,overflow:"hidden",marginBottom:"12px",position:"relative",boxShadow:dark?"0 8px 32px rgba(0,0,0,0.5)":"0 8px 32px rgba(31,38,135,0.07)",transition:"background 0.3s, border-color 0.3s, box-shadow 0.3s"};
-  const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1.5px solid ${t.border}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s, box-shadow 0.15s",fontFamily:"inherit"};
+  const cardClass = "bg-white/20 dark:bg-black/40 backdrop-blur-md border border-white/30 dark:border-white/10 rounded-2xl overflow-hidden mb-3 relative transition-all duration-300 shadow-[0_8px_32px_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)]";
+  const cardStyle = {};
+  const inputStyle={width:"100%",padding:"10px",background:t.input,border:`1px solid ${dark ? "rgba(139,92,246,0.4)" : "rgba(34,211,238,0.5)"}`,borderRadius:"8px",color:t.text,fontSize:"14px",fontWeight:600,outline:"none",boxSizing:"border-box",transition:"all 0.3s",fontFamily:"inherit",boxShadow:dark?"0 0 10px rgba(139,92,246,0.2)":"0 0 12px rgba(34,211,238,0.3)"};
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
   const handleStockCode = (e) => {
@@ -442,7 +443,8 @@ export default function PivotAnalyzer() {
   if (!mounted) return null;
 
   return (
-    <div style={{ minHeight:"100vh",background:t.bg,display:"flex",justifyContent:"center",padding:"24px 16px",fontFamily:"'Segoe UI',system-ui,sans-serif",transition:"background 0.4s",position:"relative" }}>
+    <div className={dark ? "dark" : ""}>
+      <div className="min-h-screen flex justify-center p-6 relative transition-colors duration-500 bg-gray-50 dark:bg-gradient-to-br dark:from-slate-900 dark:to-black" style={{ fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
       <Particles dark={dark} />
       <div style={{ width:"100%",maxWidth:"430px",position:"relative",zIndex:1 }}>
 
@@ -482,7 +484,7 @@ export default function PivotAnalyzer() {
 
         {tab==="main" && <>
           <FadeIn delay={120}>
-            <div style={cardStyle}>
+            <div className={cardClass}>
               <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                 <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>DATA OHLC</span>
                 <button onClick={clear} style={{ fontSize:"11px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"3px 10px",cursor:"pointer",fontWeight:700 }}>✕ Clear</button>
@@ -560,7 +562,7 @@ export default function PivotAnalyzer() {
 
           {pivotStrength && (
             <FadeIn delay={0}>
-              <div style={{ ...cardStyle,padding:"14px 16px" }}>
+              <div className={cardClass} style={{ padding:"14px 16px" }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px" }}>
                   <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>💪 PIVOT STRENGTH</span>
                   <span style={{ fontSize:"13px",fontWeight:900,color:pivotStrength.color }}>{pivotStrength.label}</span>
@@ -588,7 +590,7 @@ export default function PivotAnalyzer() {
 
           {bandarPower && (
             <FadeIn delay={0}>
-              <div style={{ ...cardStyle,padding:"14px 16px" }}>
+              <div className={cardClass} style={{ padding:"14px 16px" }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px" }}>
                   <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>⚡ BANDAR POWER DETECTOR</span>
                 </div>
@@ -614,7 +616,7 @@ export default function PivotAnalyzer() {
 
           {levelDefs.length>0 && (
             <FadeIn delay={0}>
-              <div style={cardStyle}>
+              <div className={cardClass}>
                 <HeatmapBg levels={levelDefs} currentPrice={currentPrice} dark={dark} />
                 <div style={{ position:"relative",zIndex:1 }}>
                   <div style={{ padding:"12px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between" }}>
@@ -677,9 +679,9 @@ export default function PivotAnalyzer() {
 
           {result && (
             <FadeIn delay={0}>
-              <div style={{ ...cardStyle,padding:"14px 16px" }}>
+              <div className={cardClass} style={{ padding:"14px 16px", background: dark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.4)" }}>
                 <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px" }}>
-                  <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>⚖️ TRADING PLAN OPTIMIZER</span>
+                  <span style={{ fontSize:"11px",fontWeight:700,color:dark ? "#bbb" : "#444",letterSpacing:"1px" }}>⚖️ TRADING PLAN OPTIMIZER</span>
                 </div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 80px",gap:"10px",marginBottom:"12px" }}>
                   <div>
@@ -769,7 +771,7 @@ export default function PivotAnalyzer() {
         {tab==="avg" && (
           <FadeIn delay={0}>
             <div>
-              <div style={cardStyle}>
+              <div className={cardClass}>
                 <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                   <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>🧮 KALKULATOR AVERAGE</span>
                   <button onClick={clearAvg} style={{ fontSize:"11px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"3px 10px",cursor:"pointer",fontWeight:700 }}>✕ Reset</button>
@@ -798,7 +800,7 @@ export default function PivotAnalyzer() {
               </div>
               {avgResult&&(
                 <FadeIn delay={0}>
-                  <div style={cardStyle}>
+                  <div className={cardClass}>
                     <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}` }}><span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>HASIL KALKULASI</span></div>
                     <div style={{ padding:"16px" }}>
                       <div style={{ textAlign:"center",padding:"16px",background:t.cardInner,borderRadius:"10px",marginBottom:"14px",border:`1px solid ${t.border}`,boxShadow:"0 0 20px rgba(37,99,235,0.1)" }}>
@@ -836,7 +838,7 @@ export default function PivotAnalyzer() {
 
         {tab==="history" && (
           <FadeIn delay={0}>
-            <div style={cardStyle}>
+            <div className={cardClass}>
               <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                 <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>🕐 RIWAYAT KALKULASI</span>
                 {history.length>0&&<button onClick={()=>{setHistory([]);try{localStorage.removeItem("pivot_history");}catch{}}} style={{ fontSize:"10px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"2px 8px",cursor:"pointer",fontWeight:700 }}>Hapus Semua</button>}
@@ -873,7 +875,7 @@ export default function PivotAnalyzer() {
                 date={new Date().toLocaleDateString("id-ID", {day:"2-digit",month:"short",year:"numeric"})} 
               />
             ) : (
-              <div style={{ textAlign:"center",padding:"40px 20px",color:t.sub,fontSize:"13px", ...cardStyle }}>
+              <div className={cardClass} style={{ textAlign:"center", padding:"40px 20px", color:t.sub, fontSize:"13px" }}>
                 Silakan isi Data OHLC dan Hitung Pivot terlebih dahulu untuk membuat Story 📸
               </div>
             )}
@@ -883,6 +885,7 @@ export default function PivotAnalyzer() {
         <p style={{ textAlign:"center",marginTop:"16px",fontSize:"10px",color:t.sub }}>For educational use only · Pivot Analyzer Pro</p>
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.85)}}`}</style>
+      </div>
     </div>
   );
 }
