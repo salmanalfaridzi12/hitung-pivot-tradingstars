@@ -2,30 +2,33 @@ import { NextResponse } from 'next/server';
 import { Telegraf } from 'telegraf';
 import jwt from 'jsonwebtoken';
 
+// Mengambil environment variables dengan fallback string kosong agar type checker (TypeScript) tidak protes
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const GROUP_ID = process.env.GROUP_ID || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
+// Inisialisasi object Telegraf yang akan melayani logic bot
 const bot = new Telegraf(BOT_TOKEN);
 
 bot.start((ctx) => {
-  ctx.reply('Selamat datang! Gunakan perintah /login untuk memverifikasi keanggotaan dan mengakses web tujuan.');
+  ctx.reply('Selamat datang di Telegram Gatekeeper Pivot Analyzer. Silakan gunakan perintah /login.');
 });
 
 bot.command('login', async (ctx) => {
   try {
     const userId = ctx.from.id;
-    // Pengecekan member dalam grup
+    // Mendapatkan status anggota di dalam grup privat
     const member = await ctx.telegram.getChatMember(GROUP_ID, userId);
     
+    // Periksa apakah peran mereka mengizinkan (bukan 'left' atau 'kicked')
     if (['creator', 'administrator', 'member'].includes(member.status)) {
-      // Buat token expire dalam 5 menit
+      // Pembuatan JWT untuk verifikasi session selama 5 menit
       const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '5m' });
       const loginUrl = `${SITE_URL}/api/auth?token=${token}`;
       
-      // Kirim pesan interaktif berupa tombol URL inline
-      ctx.reply(`✅ Anda telah terverifikasi sebagai member komunitas.\n\nKlik tautan di bawah ini untuk masuk. (Link kedaluwarsa dalam 5 menit):`, {
+      // Mengirimkan tiket session dengan tombol Inline URL Telegram
+      ctx.reply(`✅ Keanggotaan VIP Dikonfirmasi.\n\nKlik layar monitor di bawah ini untuk mengakses Pivot Analyzer Pro. (Tautan ini hanya berlaku untuk 5 menit):`, {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🖥️ Buka Pivot Analyzer Pro", url: loginUrl }]
@@ -33,30 +36,32 @@ bot.command('login', async (ctx) => {
         }
       });
     } else {
-      ctx.reply('❌ Akses ditolak. Anda belum menjadi member di grup VIP kami.');
+      ctx.reply('❌ Akses ditolak. Anda belum terdaftar sebagai anggota grup resmi TradingStars.');
     }
   } catch (error) {
-    console.error('Error on /login:', error);
-    ctx.reply('❌ Terjadi kesalahan saat memeriksa status member atau Anda belum berada di grup resmi.');
+    console.error('Error handling /login command:', error);
+    ctx.reply('❌ Terjadi kegagalan komunikasi dengan server atau Anda tidak berada di dalam grup.');
   }
 });
 
-// Handler utama Endpoint POST Vercel (menerima Webhook dari Telegram)
+// Mengekspose Endpoint POST khusus untuk konsumsi Next.js Vercel Webhook
 export async function POST(req: Request) {
   try {
+    // Apabila BOT_TOKEN kosong, jangan paksakan telegraf dijalankan
     if (!BOT_TOKEN) {
-      return NextResponse.json({ error: 'Tidak ada BOT_TOKEN.' }, { status: 500 });
+      return NextResponse.json({ error: 'Server mengalami kesalahan konfigurasi (BOT_TOKEN tidak ditemukan).' }, { status: 500 });
     }
     
-    // Ambil payload JSON dari request telegram
     const body = await req.json();
     
-    // Alirkan trigger webhook ini ke telegraf JS solver
+    // Meneruskan update dari Telegram (JSON) langsung ke handler Telegraf lokal
     await bot.handleUpdate(body);
     
-    return NextResponse.json({ message: 'Success' }, { status: 200 });
+    return NextResponse.json({ success: true, message: 'Webhook diproses dengan sukses' }, { status: 200 });
   } catch (error) {
-    console.error('Webhook error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Terjadi pengecualian (Exception) saat webhook dipanggil:', error);
+    // Kita paksakan pengembalian status 200 kepada server telegram meskipun error internal
+    // agar telegram tidak membanjiri re-trigger webhook berkali-kali jika server merespons 500.
+    return NextResponse.json({ error: 'Kesalahan internal webhook' }, { status: 200 });
   }
 }
