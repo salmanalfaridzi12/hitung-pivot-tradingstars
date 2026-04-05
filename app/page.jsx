@@ -796,8 +796,8 @@ export default function PivotAnalyzer() {
       <ConfettiBurst particles={confetti} />
       <LiveToast pulse={livePulse} dark={dark} />
       <CardTransitionMode active={cardTransition} dark={dark} />
-      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "8px 0", background: dark ? "rgba(0,0,0,0.6)" : "rgba(226,232,240,0.8)", backdropFilter: "blur(4px)", borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`, zIndex: 10, overflow: "hidden" }}>
-        <div style={{ display: "inline-block", willChange: "transform", animation: "marqueeAnim 18s linear infinite", whiteSpace: "nowrap" }}>
+      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "8px 0", background: dark ? "rgba(0,0,0,0.6)" : "rgba(226,232,240,0.8)", backdropFilter: "blur(4px)", borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`, zIndex: 10, overflow: "hidden", perspective: "1000px", backfaceVisibility: "hidden" }}>
+        <div style={{ display: "inline-block", willChange: "transform", animation: "marqueeAnim 25s linear infinite", whiteSpace: "nowrap", backfaceVisibility: "hidden" }}>
           <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "1px", color: dark ? "#f8fafc" : "#1e293b" }}>{getMarketStatus()} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {getMarketStatus()} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {getMarketStatus()}</span>
         </div>
       </div>
@@ -1292,8 +1292,8 @@ export default function PivotAnalyzer() {
   @keyframes holoCard{0%{transform:rotateY(-90deg) scale(0.8);opacity:0}40%{transform:rotateY(10deg) scale(1.05);opacity:1}60%{transform:rotateY(-5deg) scale(1)}100%{transform:rotateY(0deg) scale(1)}}
   @keyframes progressLine{0%{width:0%}100%{width:100%}}
   @keyframes marqueeAnim {
-    0% { transform: translateX(100vw) translateZ(0); }
-    100% { transform: translateX(-100%) translateZ(0); }
+    0% { transform: translate3d(100vw, 0, 0); }
+    100% { transform: translate3d(-100%, 0, 0); }
   }
 `}</style>
       </div>
