@@ -759,6 +759,27 @@ export default function PivotAnalyzer() {
     navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2500);
   };
 
+  const shareWa = () => {
+    if(!result) return;
+    const sym = stockCode ? stockCode.toUpperCase() : "Saham";
+    const cp = parseFloat(currentPrice) || result.pivot;
+    const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
+    const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
+    const text = `📊 ANALISA PIVOT - ${sym}\n------------------------------\n🕒 Harga: ${fmt(cp)}\n📈 R2: ${fmt(result.r2)} | R1: ${fmt(result.r1)}\n🎯 Pivot: ${fmt(result.pivot)}\n📉 S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}\n------------------------------\n🔥 Vol vs MA20: ${volRatio} x\n✅ Trend: ${trendStat}\n------------------------------\nCek Analisa Lengkap di:\n${typeof window !== 'undefined' ? window.location.origin : ''}`;
+    window.open(`https://wa.me/?text=${window.encodeURIComponent(text)}`, "_blank");
+  };
+
+  const shareTg = () => {
+    if(!result) return;
+    const sym = stockCode ? stockCode.toUpperCase() : "Saham";
+    const cp = parseFloat(currentPrice) || result.pivot;
+    const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
+    const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
+    const text = `📊 ANALISA PIVOT - ${sym}\n------------------------------\n🕒 Harga: ${fmt(cp)}\n📈 R2: ${fmt(result.r2)} | R1: ${fmt(result.r1)}\n🎯 Pivot: ${fmt(result.pivot)}\n📉 S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}\n------------------------------\n🔥 Vol vs MA20: ${volRatio} x\n✅ Trend: ${trendStat}\n------------------------------`;
+    const url = typeof window !== 'undefined' ? window.location.origin : '';
+    window.open(`https://t.me/share/url?url=${window.encodeURIComponent(url)}&text=${window.encodeURIComponent(text)}`, "_blank");
+  };
+
   const addEntry=()=>setAvgEntries(e=>[...e,{price:"",lot:""}]);
   const removeEntry=(i)=>setAvgEntries(e=>e.filter((_,idx)=>idx!==i));
   const updateEntry=(i,field,val)=>setAvgEntries(e=>e.map((item,idx)=>idx===i?{...item,[field]:val}:item));
@@ -1134,9 +1155,18 @@ export default function PivotAnalyzer() {
                   Analisa menggunakan metode <b>Pivot Point (Floor Method)</b> untuk menentukan area support dan resistance intraday.
                 </div>
 
-                <SpringBtn onClick={copyAnalisa} style={{ width:"100%",padding:"13px",background:copied?"#16a34a":"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:copied?"0 4px 14px rgba(22,163,74,0.4)":"0 4px 14px rgba(37,99,235,0.35)",display:"block" }}>
-                  {copied ? "✅ Laporan Disalin!" : "📤 Salin & Share Analisa"}
+                <SpringBtn onClick={copyAnalisa} style={{ width:"100%",padding:"13px",background:copied?"#16a34a":"#2563eb",color:"#fff",border:"none",borderRadius:"10px",fontSize:"13px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:copied?"0 4px 14px rgba(22,163,74,0.4)":"0 4px 14px rgba(37,99,235,0.35)",display:"block",marginBottom:"8px" }}>
+                  {copied ? "✅ Laporan Disalin!" : "📤 Salin Laporan Teks"}
                 </SpringBtn>
+                
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+                  <SpringBtn onClick={shareWa} style={{ width:"100%",padding:"10px",background:"#25D366",color:"#fff",border:"none",borderRadius:"10px",fontSize:"12px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:"0 4px 14px rgba(37,211,102,0.35)",display:"flex",justifyContent:"center",alignItems:"center",gap:"6px" }}>
+                    Share ke WA
+                  </SpringBtn>
+                  <SpringBtn onClick={shareTg} style={{ width:"100%",padding:"10px",background:"#0088cc",color:"#fff",border:"none",borderRadius:"10px",fontSize:"12px",fontWeight:800,cursor:"pointer",transition:"background 0.3s",boxShadow:"0 4px 14px rgba(0,136,204,0.35)",display:"flex",justifyContent:"center",alignItems:"center",gap:"6px" }}>
+                    Share ke TG
+                  </SpringBtn>
+                </div>
               </div>
             </FadeIn>
           )}
