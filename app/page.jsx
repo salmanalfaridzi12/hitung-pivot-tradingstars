@@ -759,13 +759,34 @@ export default function PivotAnalyzer() {
     navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2500);
   };
 
+  const buildShareText = (sym, cp, volRatio, trendStat, result, url) => {
+    return `🚀 TRADINGSTARS - PIVOT ANALYZER 🚀
+💎 STOCK: ${sym}
+🕒 Price: ${fmt(cp)}
+
+📈 RESISTANCE
+R2: ${fmt(result.r2)} | R1: ${fmt(result.r1)}
+
+🎯 PIVOT POINT: ${fmt(result.pivot)}
+
+🛡️ SUPPORT
+S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
+
+⚡ Vol Ratio: ${volRatio} x (vs MA20)
+🚥 Signal: ${trendStat}
+
+🔥 Analisa Cepat, Trading Akurat bersama TradingStars!
+🔗 Cek di: ${url}`;
+  };
+
   const shareWa = () => {
     if(!result) return;
     const sym = stockCode ? stockCode.toUpperCase() : "Saham";
     const cp = parseFloat(currentPrice) || result.pivot;
     const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
     const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
-    const text = `📊 ANALISA PIVOT - ${sym}\n------------------------------\n🕒 Harga: ${fmt(cp)}\n📈 R2: ${fmt(result.r2)} | R1: ${fmt(result.r1)}\n🎯 Pivot: ${fmt(result.pivot)}\n📉 S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}\n------------------------------\n🔥 Vol vs MA20: ${volRatio} x\n✅ Trend: ${trendStat}\n------------------------------\nCek Analisa Lengkap di:\n${typeof window !== 'undefined' ? window.location.origin : ''}`;
+    const url = typeof window !== 'undefined' ? window.location.origin : '';
+    const text = buildShareText(sym, cp, volRatio, trendStat, result, url);
     window.open(`https://wa.me/?text=${window.encodeURIComponent(text)}`, "_blank");
   };
 
@@ -775,8 +796,8 @@ export default function PivotAnalyzer() {
     const cp = parseFloat(currentPrice) || result.pivot;
     const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
     const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
-    const text = `📊 ANALISA PIVOT - ${sym}\n------------------------------\n🕒 Harga: ${fmt(cp)}\n📈 R2: ${fmt(result.r2)} | R1: ${fmt(result.r1)}\n🎯 Pivot: ${fmt(result.pivot)}\n📉 S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}\n------------------------------\n🔥 Vol vs MA20: ${volRatio} x\n✅ Trend: ${trendStat}\n------------------------------`;
     const url = typeof window !== 'undefined' ? window.location.origin : '';
+    const text = buildShareText(sym, cp, volRatio, trendStat, result, url);
     window.open(`https://t.me/share/url?url=${window.encodeURIComponent(url)}&text=${window.encodeURIComponent(text)}`, "_blank");
   };
 
