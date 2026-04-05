@@ -48,12 +48,34 @@ async def get_stock_data(ticker: str):
         if price is None or str(price) == 'nan':
             raise HTTPException(status_code=404, detail=f"Stock data unavailable for {ticker}")
 
+        # Compute MA20 Volume
+        try:
+            import datetime
+            import pytz
+            tz = pytz.timezone('Asia/Jakarta')
+            now = datetime.datetime.now(tz)
+
+            hist_1mo = stock.history(period="1mo")
+            ma20_volume = 0
+            if not hist_1mo.empty:
+                vols = hist_1mo['Volume']
+                # Exclude today if market is still running (before 16:00 WIB)
+                if now.hour < 16 and not vols.empty and vols.index[-1].date() == now.date():
+                    vols = vols[:-1]
+                
+                ma20_vol_raw = vols.tail(20).mean()
+                ma20_volume = int(round(ma20_vol_raw / 100)) if ma20_vol_raw else 0
+        except Exception as e:
+            print(f"Error calculating MA20 Volume: {e}")
+            ma20_volume = 0
+
         return {
             "ticker": ticker_jk,
             "close": float(price),
             "high": float(day_high),
             "low": float(day_low),
-            "volume": int(volume / 100) if volume else 0
+            "volume": int(volume / 100) if volume else 0,
+            "ma20_volume": ma20_volume
         }
     except HTTPException:
         raise

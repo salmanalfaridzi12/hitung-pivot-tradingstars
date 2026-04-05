@@ -604,8 +604,7 @@ export default function PivotAnalyzer() {
       setClose(data.close ? String(data.close) : "");
       setCurrentPrice(data.close ? String(data.close) : "");
       setVolume(data.volume ? String(data.volume) : "");
-      // Kita tidak memiliki ma20Volume dari script main.py yang baru, biarkan tetap kosong atau diisi default
-      setMa20Volume(""); 
+      setMa20Volume(data.ma20_volume ? String(data.ma20_volume) : ""); 
       setOpen(data.open ? String(data.open) : ""); // Open mungkin tidak ada
       
       setResult(null);
