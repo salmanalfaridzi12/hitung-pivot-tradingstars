@@ -584,55 +584,38 @@ export default function PivotAnalyzer() {
     const val = typeof overrideCode === "string" ? overrideCode.toUpperCase() : stockCode.toUpperCase();
     if (!val || val.length < 2) return;
     
-    const apiKey = process.env.NEXT_PUBLIC_TWELVEDATA_API_KEY;
-    console.log("🔑 [TwelveData] API Key Presence:", apiKey ? "AVAILABLE" : "MISSING");
-    if (!apiKey) {
-      console.warn("⚠️ [TwelveData] NEXT_PUBLIC_TWELVEDATA_API_KEY is not defined in environment variables!");
-      return;
-    }
-    
     setLoading(true);
-    setFetchStatus(""); // Reset status on new fetch
-    let success = false;
-    const suffixes = [":XIDX", ":IDX", ".JK"]; // Triple suffix check
+    setFetchStatus("Mencari data saham...");
     
-    for (const suffix of suffixes) {
-      if (success) break;
+    try {
+      console.log(`🌐 [Backend] Fetching data for: ${val}`);
+      // Hubungi API Python Serverless (Relative Path Vercel)
+      const res = await fetch(`/api/stock/${val}`);
       
-      const symbol = val.includes(":") || val.includes(".") ? val : `${val}${suffix}`;
-      console.log(`🌐 [TwelveData] Fetching data for: ${symbol}`);
-      
-      try {
-        const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=20&apikey=${apiKey}`;
-        console.log(`📡 [TwelveData] GET request sent for ${symbol}`); 
-        const res = await fetch(url);
-        const data = await res.json();
-        console.log(`📥 [TwelveData] Response for ${symbol}:`, data);
-        
-        if (data.status === "ok" && data.values && data.values.length > 0) {
-          const latest = data.values[0];
-          setOpen(latest.open || "");
-          setHigh(latest.high || "");
-          setLow(latest.low || "");
-          setClose(latest.close || "");
-          setVolume(latest.volume || "");
-          setCurrentPrice(latest.close || "");
-          
-          const sumVolume = data.values.reduce((acc, curr) => acc + Number(curr.volume || 0), 0);
-          setMa20Volume(Math.round(sumVolume / data.values.length).toString());
-          console.log(`✅ [TwelveData] Data successfully applied for ${symbol}:`, latest);
-          success = true; // Stop loop on success
-        } else {
-          console.log(`❌ [TwelveData] Data empty or unavailable for ${symbol}`);
-        }
-      } catch (err) {
-        console.error(`💥 [TwelveData] Error fetching ${symbol}:`, err);
+      if (!res.ok) {
+        throw new Error("Data tidak ditemukan dari API backend");
       }
-    }
-    
-    if (!success) {
-      console.log(`🛑 [TwelveData] Fallback: All attempts failed for ${val}. Switching to Manual mode.`);
-      setFetchStatus("📡 Mode: Manual (Data Bursa Tidak Tersedia)");
+      
+      const data = await res.json();
+      console.log(`📥 [Backend] Response for ${val}:`, data);
+      
+      setHigh(data.high ? String(data.high) : "");
+      setLow(data.low ? String(data.low) : "");
+      setClose(data.close ? String(data.close) : "");
+      setCurrentPrice(data.close ? String(data.close) : "");
+      setVolume(data.volume ? String(data.volume) : "");
+      // Kita tidak memiliki ma20Volume dari script main.py yang baru, biarkan tetap kosong atau diisi default
+      setMa20Volume(""); 
+      setOpen(data.open ? String(data.open) : ""); // Open mungkin tidak ada
+      
+      setResult(null);
+      setFetchStatus("✅ Auto-Fill Berhasil!");
+      setTimeout(() => setFetchStatus(""), 3000);
+      
+      console.log(`✅ [Backend] Data successfully applied for ${val}`);
+    } catch (err) {
+      console.error(`💥 [Backend] Error fetching ${val}:`, err);
+      setFetchStatus("📡 Mode: Manual (Saham Tidak Ditemukan)");
       
       // Keep UI honest: Clear fields when data is unavailable
       setHigh("");

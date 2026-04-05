@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/stock/:path*",
+      "destination": "/api/index.py"
+    }
+  ]
+}
