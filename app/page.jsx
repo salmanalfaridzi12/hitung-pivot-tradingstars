@@ -1291,6 +1291,10 @@ export default function PivotAnalyzer() {
   @keyframes fadeInC{from{opacity:0}to{opacity:1}}
   @keyframes holoCard{0%{transform:rotateY(-90deg) scale(0.8);opacity:0}40%{transform:rotateY(10deg) scale(1.05);opacity:1}60%{transform:rotateY(-5deg) scale(1)}100%{transform:rotateY(0deg) scale(1)}}
   @keyframes progressLine{0%{width:0%}100%{width:100%}}
+  @keyframes marqueeAnim {
+    0% { transform: translateX(100vw) translateZ(0); }
+    100% { transform: translateX(-100%) translateZ(0); }
+  }
 `}</style>
       </div>
     </div>
