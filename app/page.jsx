@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import StoryExportCard from "../components/StoryExportCard";
 
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
@@ -26,7 +26,7 @@ function AnimNum({ value, fmt }) {
   return <>{fmt(animated)}</>;
 }
 
-function Particles({ dark }) {
+const Particles = memo(({ dark }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
@@ -63,9 +63,9 @@ function Particles({ dark }) {
     return () => { cancelAnimationFrame(raf); obs.disconnect(); };
   }, [dark]);
   return <canvas ref={canvasRef} style={{ position:"fixed",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:0 }} />;
-}
+});
 
-function HeatmapBg({ levels, currentPrice, dark }) {
+const HeatmapBg = memo(({ levels, currentPrice, dark }) => {
   const canvasRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas || !levels.length) return;
@@ -86,7 +86,7 @@ function HeatmapBg({ levels, currentPrice, dark }) {
     }
   }, [levels, currentPrice, dark]);
   return <canvas ref={canvasRef} style={{ position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",borderRadius:"16px" }} />;
-}
+});
 
 function getSession() {
   const d = new Date();
@@ -140,7 +140,7 @@ function GlowCard({ children, dark, style={}, className="" }) {
 }
 
 
-function Speedometer({ value, setValue, dark, t }) {
+const Speedometer = memo(({ value, setValue, dark, t }) => {
   const getCol = (v) => v < 20 ? "#dc2626" : v < 40 ? "#ea580c" : v < 60 ? "#f59e0b" : v < 80 ? "#84cc16" : "#22c55e";
   const getLabel = (v) => v < 20 ? "EXTREME FEAR" : v < 40 ? "FEAR" : v < 60 ? "NEUTRAL" : v < 80 ? "GREED" : "EXTREME GREED";
   const col = getCol(value);
@@ -166,7 +166,7 @@ function Speedometer({ value, setValue, dark, t }) {
       <span style={{ fontSize: "8px", color: t.sub, marginTop: "4px", zIndex: 1 }}>Gunakan slider untuk set manual</span>
     </div>
   );
-}
+});
 
 function LiveToast({ pulse, dark }) {
   if (!pulse) return null;
@@ -264,6 +264,15 @@ function useSpringButton() {
   return { ref, press };
 }
 
+const Clock = memo(({ dark }) => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const iv = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  return <span style={{ fontSize:"11px",fontWeight:700,color: dark ? "#94a3b8" : "#475569" }}>{time.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</span>;
+});
+
 function getMarketStatus() {
   const d = new Date();
   const options = { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false };
@@ -305,7 +314,7 @@ const QUOTES = [
   "\"Jangan trading karena bosan. Trading karena ada setup yang valid.\" — TradingStars",
 ];
 
-function StoryJournal({ history, dark, t, onRecall }) {
+const StoryJournal = memo(({ history, dark, t, onRecall }) => {
   const today = new Date().toLocaleDateString("id-ID");
   const todayEntries = history.filter(h => h.date === today);
   const uniqueStocks = [...new Set(todayEntries.map(h => h.stockCode).filter(Boolean).filter(s => s !== "—"))];
@@ -395,7 +404,7 @@ function StoryJournal({ history, dark, t, onRecall }) {
       )}
     </div>
   );
-}
+});
 
 function getPivotStrength(result) {
   if (!result) return null;
@@ -530,14 +539,11 @@ export default function PivotAnalyzer() {
   const [avgResult,setAvgResult]=useState(null);
   const [session]=useState(getSession());
   const [glowLevel,setGlowLevel]=useState(null);
-  const [time,setTime]=useState(new Date());
   const [mounted,setMounted]=useState(false);
   const [fetchStatus,setFetchStatus]=useState("");
 
   useEffect(()=>{ 
     setMounted(true);
-    const iv=setInterval(()=>setTime(new Date()),1000); 
-    return ()=>clearInterval(iv); 
   },[]);
 
   const fmt=(n)=>n!=null?n.toLocaleString("id-ID"):"—";
@@ -790,8 +796,10 @@ export default function PivotAnalyzer() {
       <ConfettiBurst particles={confetti} />
       <LiveToast pulse={livePulse} dark={dark} />
       <CardTransitionMode active={cardTransition} dark={dark} />
-      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "8px 0", background: dark ? "rgba(0,0,0,0.6)" : "rgba(226,232,240,0.8)", backdropFilter: "blur(4px)", borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`, zIndex: 10 }}>
-        <marquee scrollamount="5" style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "1px", color: dark ? "#f8fafc" : "#1e293b" }}>{getMarketStatus()}</marquee>
+      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", padding: "8px 0", background: dark ? "rgba(0,0,0,0.6)" : "rgba(226,232,240,0.8)", backdropFilter: "blur(4px)", borderBottom: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"}`, zIndex: 10, overflow: "hidden" }}>
+        <div style={{ display: "inline-block", willChange: "transform", animation: "marqueeAnim 18s linear infinite", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "1px", color: dark ? "#f8fafc" : "#1e293b" }}>{getMarketStatus()} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {getMarketStatus()} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {getMarketStatus()}</span>
+        </div>
       </div>
       <Particles dark={dark} />
       <div style={{ width:"100%",maxWidth:"430px",position:"relative",zIndex:1 }}>
@@ -799,7 +807,7 @@ export default function PivotAnalyzer() {
         <FadeIn delay={0}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px" }}>
             <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
-              <img src="/logo-tradingstars.jpg" alt="TradingStars Logo" style={{ width:"42px",height:"42px",borderRadius:"10px",objectFit:"cover",boxShadow:"0 4px 14px rgba(124,58,237,0.45)" }} />
+              <img src="/logo-tradingstars.jpg" alt="TradingStars Logo" fetchPriority="high" decoding="async" style={{ width:"42px",height:"42px",borderRadius:"10px",objectFit:"cover",boxShadow:"0 4px 14px rgba(124,58,237,0.45)" }} />
               <div>
                 <div style={{ fontSize:"17px",fontWeight:800,color:t.text }}>Pivot Analyzer</div>
                 <div style={{ fontSize:"10px",color:t.sub }}>Classical Floor Method · R3/S3</div>
@@ -816,7 +824,7 @@ export default function PivotAnalyzer() {
               <span style={{ fontSize:"12px",fontWeight:700,color:session.color }}>{session.name}</span>
               <span style={{ fontSize:"10px",color:t.sub }}>{session.open?"• OPEN":"• CLOSED"}</span>
             </div>
-            <span style={{ fontSize:"11px",fontWeight:700,color:t.sub }}>{time.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</span>
+            <Clock dark={dark} />
           </div>
         </FadeIn>
 
@@ -838,7 +846,7 @@ export default function PivotAnalyzer() {
             <Speedometer value={sentimentVal} setValue={setSentimentVal} dark={dark} t={t} />
           </FadeIn>
           <FadeIn delay={120}>
-            <div className={cardClass}>
+            <div className={cardClass} style={{ ...cardStyle, minHeight: "380px" }}>
               <div style={{ padding:"13px 16px",borderBottom:`1px solid ${t.border}`,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                 <span style={{ fontSize:"11px",fontWeight:700,color:t.sub,letterSpacing:"1px" }}>DATA OHLC</span>
                 <button onClick={clear} style={{ fontSize:"11px",color:"#ef4444",background:dark?"#3b0f0f":"#fef2f2",border:"1px solid #fecaca",borderRadius:"6px",padding:"3px 10px",cursor:"pointer",fontWeight:700 }}>✕ Clear</button>
