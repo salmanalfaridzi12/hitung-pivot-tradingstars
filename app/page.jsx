@@ -516,7 +516,7 @@ export default function PivotAnalyzer() {
   const [ma20Volume,setMa20Volume]=useState("");
   const [currentPrice,setCurrentPrice]=useState(""); const [result,setResult]=useState(null);
   const [loading,setLoading]=useState(false); const [progress,setProgress]=useState(0);
-  const [dark,setDark]=useState(false); const [copied,setCopied]=useState(false);
+  const [dark,setDark]=useState(true); const [copied,setCopied]=useState(false);
   const [pivotMethod,setPivotMethod]=useState("classic");
   const [confetti,setConfetti]=useState([]);
   const [shaking,setShaking]=useState(false);
@@ -805,9 +805,7 @@ export default function PivotAnalyzer() {
                 <div style={{ fontSize:"10px",color:t.sub }}>Classical Floor Method · R3/S3</div>
               </div>
             </div>
-            <button onClick={()=>setDark(d=>!d)} style={{ padding:"7px 14px",background:dark?"rgba(139,92,246,0.15)":t.card,border:`1px solid ${dark?"rgba(139,92,246,0.4)":t.border}`,borderRadius:"20px",cursor:"pointer",fontSize:"13px",color:t.text,boxShadow:dark?"0 0 10px rgba(139,92,246,0.3)":"none",transition:"all 0.3s" }}>
-              {dark?"☀️ LIGHT":"🌙 DARK"}
-            </button>
+            {/* Dark mode button removed as requested */}
           </div>
         </FadeIn>
 
