@@ -807,7 +807,7 @@ export default function PivotAnalyzer() {
         <FadeIn delay={0}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px" }}>
             <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
-              <img src="/logo-tradingstars.jpg" alt="TradingStars Logo" fetchPriority="high" decoding="async" style={{ width:"42px",height:"42px",borderRadius:"10px",objectFit:"cover",boxShadow:"0 4px 14px rgba(124,58,237,0.45)" }} />
+              <img src="/logo-ts.png" alt="TradingStars Logo" fetchPriority="high" decoding="async" style={{ width:"42px",height:"42px",borderRadius:"10px",objectFit:"cover",boxShadow:"0 4px 14px rgba(124,58,237,0.45)" }} />
               <div>
                 <div style={{ fontSize:"17px",fontWeight:800,color:t.text }}>Pivot Analyzer</div>
                 <div style={{ fontSize:"10px",color:t.sub }}>Classical Floor Method · R3/S3</div>
