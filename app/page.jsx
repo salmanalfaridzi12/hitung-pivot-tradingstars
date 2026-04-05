@@ -576,6 +576,50 @@ export default function PivotAnalyzer() {
     navigator.clipboard.writeText(text); alert("✅ Hasil Kalkulasi Average Berhasil Disalin!");
   };
 
+  const getSmartAction = (cpStr, resultObj) => {
+    if (!resultObj || !cpStr) return null;
+    const cp = parseFloat(cpStr);
+    let action = { title: "WAIT & SEE ⏳", desc: "Harga berada di posisi abu-abu (No-Man's Land). Waspada volatilitas.", color: "#8b5cf6", shareText: "WAIT & SEE ⏳", glowLabel: null };
+    
+    const levels = [
+      { label: "R3", val: resultObj.r3, type: "R" },
+      { label: "R2", val: resultObj.r2, type: "R" },
+      { label: "R1", val: resultObj.r1, type: "R" },
+      { label: "PP", val: resultObj.pivot, type: "P" },
+      { label: "S1", val: resultObj.s1, type: "S" },
+      { label: "S2", val: resultObj.s2, type: "S" },
+      { label: "S3", val: resultObj.s3, type: "S" }
+    ];
+    let nearestLevel = levels[0];
+    let minPct = Infinity;
+
+    for (const lvl of levels) {
+      if (lvl.val <= 0) continue;
+      const pct = Math.abs((cp - lvl.val) / lvl.val) * 100;
+      if (pct < minPct) {
+        minPct = pct;
+        nearestLevel = lvl;
+      }
+    }
+
+    const pctStr = minPct.toFixed(1);
+
+    if (minPct <= 1.5) {
+      if (nearestLevel.type === "S") {
+        if (cp >= nearestLevel.val) action = { title: `🔵 DEKAT SUPPORT (${nearestLevel.label})`, desc: `Potensi Rebound, Jarak ${pctStr}% dari ${nearestLevel.label}. Siapkan Antri Beli!`, color: "#06b6d4", glowLabel: nearestLevel.label, shareText: `🔵 DEKAT SUPPORT (${nearestLevel.label}) - Potensi Rebound` };
+        else action = { title: `🐻 SUPPORT JEBOL! (${nearestLevel.label})`, desc: `Harga ambles ${pctStr}% di bawah ${nearestLevel.label}. Waspada longsor!`, color: "#ef4444", glowLabel: nearestLevel.label, shareText: `🐻 SUPPORT JEBOL (${nearestLevel.label})!` };
+      } else if (nearestLevel.type === "R") {
+        if (cp <= nearestLevel.val) action = { title: `⚠️ DEKAT RESISTANCE (${nearestLevel.label})`, desc: `Waspada Profit Taking, Jarak ${pctStr}% ke ${nearestLevel.label}. Siapkan Jual!`, color: "#f59e0b", glowLabel: nearestLevel.label, shareText: `⚠️ DEKAT RESISTANCE (${nearestLevel.label}) - Waspada Profit Taking` };
+        else action = { title: `🚀 RESISTANCE TEMBUS! (${nearestLevel.label})`, desc: `Harga naik ${pctStr}% di atas ${nearestLevel.label}. Potensi terbang lebih tinggi!`, color: "#10b981", glowLabel: nearestLevel.label, shareText: `🚀 BREAKOUT RESISTANCE (${nearestLevel.label})!` };
+      } else if (nearestLevel.type === "P") {
+        if (cp >= nearestLevel.val) action = { title: `🔥 BULLISH BREAKOUT!`, desc: `Harga menembus Pivot (${pctStr}%). Target terdekat R1.`, color: "#10b981", glowLabel: "PP", shareText: `🔥 BULLISH BREAKOUT! - Target R1` };
+        else action = { title: `🔴 BEARISH ZONE`, desc: `Harga tertahan di bawah Pivot (${pctStr}%). Trend jangka pendek lemah.`, color: "#ef4444", glowLabel: "PP", shareText: `🔴 BEARISH ZONE - Di Bawah Pivot` };
+      }
+    }
+    return action;
+  };
+  const smartAction = getSmartAction(currentPrice, result);
+
   const clear=()=>{setHigh("");setLow("");setClose("");setOpen("");setVolume("");setMa20Volume("");setStockCode("");setCurrentPrice("");setResult(null);setProgress(0);setGlowLevel(null);};
 
   const handleStockCode = (e) => {
@@ -759,7 +803,7 @@ export default function PivotAnalyzer() {
     navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2500);
   };
 
-  const buildShareText = (sym, cp, volRatio, trendStat, result, url) => {
+  const buildShareText = (sym, cp, volRatio, trendStat, actionObj, result, url) => {
     return `🚀 TRADINGSTARS - PIVOT ANALYZER 🚀
 💎 STOCK: ${sym}
 🕒 Price: ${fmt(cp)}
@@ -774,6 +818,7 @@ S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
 
 ⚡ Vol Ratio: ${volRatio} x (vs MA20)
 🚥 Signal: ${trendStat}
+🎯 Strategi: ${actionObj?.shareText || "Wait & See ⏳"}
 
 🔥 Analisa Cepat, Trading Akurat bersama TradingStars!
 🔗 Cek di: ${url}`;
@@ -786,7 +831,7 @@ S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
     const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
     const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
     const url = typeof window !== 'undefined' ? window.location.origin : '';
-    const text = buildShareText(sym, cp, volRatio, trendStat, result, url);
+    const text = buildShareText(sym, cp, volRatio, trendStat, smartAction, result, url);
     window.open(`https://wa.me/?text=${window.encodeURIComponent(text)}`, "_blank");
   };
 
@@ -797,7 +842,7 @@ S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
     const volRatio = bandarPower && bandarPower.volRatio ? bandarPower.volRatio : "N/A";
     const trendStat = cp > result.pivot ? "Bullish 🟢" : cp < result.pivot ? "Bearish 🔴" : "Neutral ⚪";
     const url = typeof window !== 'undefined' ? window.location.origin : '';
-    const text = buildShareText(sym, cp, volRatio, trendStat, result, url);
+    const text = buildShareText(sym, cp, volRatio, trendStat, smartAction, result, url);
     window.open(`https://t.me/share/url?url=${window.encodeURIComponent(url)}&text=${window.encodeURIComponent(text)}`, "_blank");
   };
 
@@ -1017,6 +1062,18 @@ S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
           )}
 
 
+          {smartAction && (
+            <FadeIn delay={0}>
+              <div style={{ marginBottom:"12px", background: dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${smartAction.color}40`, borderRadius:"12px", padding:"16px", backdropFilter:"blur(10px)", boxShadow:`0 4px 20px ${smartAction.color}15` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"8px" }}>
+                  <div style={{ width:"10px",height:"10px",borderRadius:"50%",background:smartAction.color,boxShadow:`0 0 10px ${smartAction.color}`,animation:"pulseBadge 1.5s infinite" }} />
+                  <span style={{ fontSize:"13px",fontWeight:900,color:smartAction.color,letterSpacing:"0.5px" }}>{smartAction.title}</span>
+                </div>
+                <div style={{ fontSize:"11px",color:t.text,lineHeight:"1.5",fontWeight:500 }}>{smartAction.desc}</div>
+              </div>
+            </FadeIn>
+          )}
+
           {levelDefs.length>0 && (() => {
             const strength = pivotStrength?.strength || 0;
             const isStrong = strength >= 70;
@@ -1042,11 +1099,12 @@ S1: ${fmt(result.s1)} | S2: ${fmt(result.s2)}
                   {levelDefs.map(({label,sub,value,color,light,border,bold},i)=>{
                     const isNearest=nearest?.nearest?.label===label, isAbove=nearest?.above?.label===label, isBelow=nearest?.below?.label===label;
                     const pct=!isNaN(cp)?(((value-cp)/cp)*100).toFixed(2):null, isPivot=label==="PP";
+                    const isGlowActive = smartAction?.glowLabel === label;
                     return (
                       <SlideIn key={label} delay={i*55}>
                         <div onMouseEnter={()=>setGlowLevel(label)} onMouseLeave={()=>setGlowLevel(null)}
-                          style={{ display:"flex",alignItems:"center",padding:"12px 16px",borderBottom:i<6?`1px solid ${t.border}`:"none",background:isNearest?light:"transparent",transition:"all 0.25s",boxShadow:glowLevel===label?`inset 0 0 0 1px ${color}30`:isPivot?`inset 0 0 0 1px ${color}20`:"none" }}>
-                          <div style={{ width:"3px",height:"36px",background:color,borderRadius:"2px",marginRight:"12px",opacity:isNearest||isAbove||isBelow?1:0.28,boxShadow:(glowLevel===label||isPivot)?`0 0 10px ${color}`:"none",transition:"box-shadow 0.3s" }} />
+                          style={{ display:"flex",alignItems:"center",padding:"12px 16px",borderBottom:i<6?`1px solid ${t.border}`:"none",background:isNearest?light:isGlowActive?`${color}10`:"transparent",transition:"all 0.25s",boxShadow:(glowLevel===label||isGlowActive)?`inset 0 0 0 1px ${color}50`:isPivot?`inset 0 0 0 1px ${color}20`:"none" }}>
+                          <div style={{ width:"3px",height:"36px",background:color,borderRadius:"2px",marginRight:"12px",opacity:isNearest||isAbove||isBelow?1:isGlowActive?0.8:0.28,boxShadow:(glowLevel===label||isPivot||isGlowActive)?`0 0 10px ${color}`:"none",transition:"box-shadow 0.3s" }} />
                           <div style={{ flex:1 }}>
                             <div style={{ display:"flex",alignItems:"center",gap:"5px" }}>
                               <span style={{ fontSize:"12px",fontWeight:800,color,textShadow:isPivot?`0 0 12px ${color}80`:"none" }}>{label}</span>
