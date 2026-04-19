@@ -178,6 +178,19 @@ export default function PivotAnalyzer() {
             icon: "/logo-ts.png",
           });
         }
+
+        const entry = {
+          id: Date.now(),
+          stockCode,
+          levels,
+          date: new Date().toLocaleDateString("id-ID"),
+          time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+          ohlc: { h, l, c, o },
+        };
+        const newHistory = [entry, ...history].slice(0, 20);
+        setHistory(newHistory);
+        localStorage.setItem("pivot_history", JSON.stringify(newHistory));
+
       } catch (err) {
         console.error("Calculate Error:", err);
         setResult(null);
@@ -185,20 +198,6 @@ export default function PivotAnalyzer() {
       } finally {
         setLoading(false);
       }
-    }, 900);
-
-      const entry = {
-        id: Date.now(),
-        stockCode,
-        levels,
-        date: new Date().toLocaleDateString("id-ID"),
-        time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-        ohlc: { h, l, c, o },
-      };
-      const newHistory = [entry, ...history].slice(0, 20);
-      setHistory(newHistory);
-      localStorage.setItem("pivot_history", JSON.stringify(newHistory));
-      setLoading(false);
     }, 600);
   };
 
