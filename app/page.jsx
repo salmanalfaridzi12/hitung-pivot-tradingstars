@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   TrendingUp, TrendingDown, Target, Shield, AlertCircle,
   Share2, Save, Bell, LineChart, Table, History, Image as ImageIcon,
-  ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar
+  ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar,
+  Loader2, CheckCircle2, XCircle, WifiOff
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
@@ -53,6 +54,10 @@ export default function PivotAnalyzer() {
 
   // ── State: Timeframe
   const [timeframe, setTimeframe] = useState("DAILY");
+
+  // ── State: Auto-Fill
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchStatus, setFetchStatus] = useState(null); // null | { type: 'success'|'error', msg: string }
 
   // ── State: Application
   const [tab, setTab] = useState("main");
@@ -163,7 +168,46 @@ export default function PivotAnalyzer() {
     setHigh(""); setLow(""); setClose(""); setOpen("");
     setVolume(""); setMa20Volume(""); setMa20Price(""); setCurrentPrice("");
     setResult(null); setPattern(null); setConfluence(null);
+    setFetchStatus(null);
   };
+
+  // ─── Auto-Fill: Fetch OHLCV + MA20 from Yahoo Finance via API route ────────
+  const handleAutoFill = useCallback(async () => {
+    const code = stockCode.trim().toUpperCase();
+    if (!code) return;
+
+    setFetchLoading(true);
+    setFetchStatus(null);
+
+    try {
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFetchStatus({ type: "error", msg: data.error || "Fetch gagal." });
+        return;
+      }
+
+      // ── Populate all fields automatically ──
+      if (data.open   != null) setOpen(String(data.open));
+      if (data.high   != null) setHigh(String(data.high));
+      if (data.low    != null) setLow(String(data.low));
+      if (data.close  != null) setClose(String(data.close));
+      if (data.volume != null) setVolume(String(data.volume));
+      if (data.ma20Volume != null) setMa20Volume(String(data.ma20Volume));
+      if (data.ma20Price  != null) setMa20Price(String(data.ma20Price));
+      if (data.currentPrice != null) setCurrentPrice(String(data.currentPrice));
+
+      setFetchStatus({
+        type: "success",
+        msg: `Data ${code} berhasil diisi${data.tradingDate ? " (" + data.tradingDate + ")" : ""}.`,
+      });
+    } catch (err) {
+      setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Coba lagi." });
+    } finally {
+      setFetchLoading(false);
+    }
+  }, [stockCode]);
 
   const addToWatchlist = () => {
     if (!result) return;
@@ -299,16 +343,47 @@ export default function PivotAnalyzer() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Stock Code */}
-                <div className="col-span-2 relative">
-                  <input
-                    type="text"
-                    value={stockCode}
-                    onChange={(e) => setStockCode(e.target.value.toUpperCase())}
-                    placeholder="KODE SAHAM (cth. SCMA)"
-                    className="w-full bg-slate-950 border border-white/10 rounded-2xl px-5 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
-                  />
-                  <Search className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-700" />
+                {/* Stock Code + Auto-Fill */}
+                <div className="col-span-2 space-y-2">
+                  <div className="relative">
+                    <input
+                      id="input-stock-code"
+                      type="text"
+                      value={stockCode}
+                      onChange={(e) => {
+                        setStockCode(e.target.value.toUpperCase());
+                        setFetchStatus(null);
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAutoFill(); }}
+                      placeholder="KODE SAHAM → tekan Enter untuk Auto-Fill"
+                      className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-5 pr-14 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
+                    />
+                    {/* Clickable Search / Loading Button */}
+                    <button
+                      onClick={handleAutoFill}
+                      disabled={fetchLoading || !stockCode.trim()}
+                      title="Auto-Fill OHLC dari IDX"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all shadow-lg shadow-purple-500/20"
+                    >
+                      {fetchLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Search className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Fetch Status Toast */}
+                  {fetchStatus && (
+                    <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-bold animate-in fade-in slide-in-from-top-2 duration-300 ${
+                      fetchStatus.type === "success"
+                        ? "bg-green-500/12 border border-green-500/30 text-green-400"
+                        : "bg-red-500/12 border border-red-500/30 text-red-400"
+                    }`}>
+                      {fetchStatus.type === "success"
+                        ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {fetchStatus.msg}
+                    </div>
+                  )}
                 </div>
 
                 {/* Open */}
