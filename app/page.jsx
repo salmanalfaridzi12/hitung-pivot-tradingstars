@@ -80,6 +80,18 @@ export default function PivotAnalyzer() {
     if ("Notification" in window) Notification.requestPermission();
   }, []);
 
+  // ── Debounced Auto-Fill: fires 800ms after user stops typing a valid code
+  useEffect(() => {
+    const code = stockCode.trim();
+    // Only trigger if 2–6 chars (typical IDX stock codes are 4 chars)
+    if (code.length < 2 || code.length > 6) return;
+    const timer = setTimeout(() => {
+      handleAutoFill();
+    }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockCode]);
+
   // ─── Derived: Trend Context (Current Price vs MA20 Price) ─────────────────
   const trendContext = useMemo(() => {
     if (!result) return null;
@@ -188,15 +200,17 @@ export default function PivotAnalyzer() {
         return;
       }
 
-      // ── Populate all fields automatically ──
-      if (data.open   != null) setOpen(String(data.open));
+      // ── Populate all fields automatically (from original Python API) ──
       if (data.high   != null) setHigh(String(data.high));
       if (data.low    != null) setLow(String(data.low));
       if (data.close  != null) setClose(String(data.close));
       if (data.volume != null) setVolume(String(data.volume));
-      if (data.ma20Volume != null) setMa20Volume(String(data.ma20Volume));
-      if (data.ma20Price  != null) setMa20Price(String(data.ma20Price));
-      if (data.currentPrice != null) setCurrentPrice(String(data.currentPrice));
+      if (data.ma20_volume != null) setMa20Volume(String(data.ma20_volume));
+      if (data.close != null) setCurrentPrice(String(data.close));
+
+      // Clear new fields that are not returned by the original API
+      setOpen("");
+      setMa20Price("");
 
       setFetchStatus({
         type: "success",
@@ -355,7 +369,8 @@ export default function PivotAnalyzer() {
                         setFetchStatus(null);
                       }}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAutoFill(); }}
-                      placeholder="KODE SAHAM → tekan Enter untuk Auto-Fill"
+                      onBlur={() => { if (stockCode.trim().length >= 2) handleAutoFill(); }}
+                      placeholder="Ketik kode saham, data terisi otomatis..."
                       className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-5 pr-14 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
                     />
                     {/* Clickable Search / Loading Button */}
