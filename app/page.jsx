@@ -67,17 +67,25 @@ export default function PivotAnalyzer() {
   const [watchlist, setWatchlist] = useState([]);
   const [pattern, setPattern] = useState(null);
   const [confluence, setConfluence] = useState(null);
+  const [isClient, setIsClient] = useState(false);
 
   // ── Refs
   const analysisCardRef = useRef(null);
 
   // ── Load persisted data
   useEffect(() => {
-    const savedHistory = JSON.parse(localStorage.getItem("pivot_history") || "[]");
-    const savedWatchlist = JSON.parse(localStorage.getItem("pivot_watchlist") || "[]");
-    setHistory(savedHistory);
-    setWatchlist(savedWatchlist);
-    if ("Notification" in window) Notification.requestPermission();
+    setIsClient(true);
+    try {
+      if (typeof window !== 'undefined') {
+        const savedHistory = JSON.parse(localStorage.getItem("pivot_history") || "[]");
+        const savedWatchlist = JSON.parse(localStorage.getItem("pivot_watchlist") || "[]");
+        setHistory(savedHistory);
+        setWatchlist(savedWatchlist);
+        if ("Notification" in window) Notification.requestPermission();
+      }
+    } catch (e) {
+      console.error("DEBUG: Failed to parse localStorage", e);
+    }
   }, []);
 
   // ── Debounced Auto-Fill: fires 800ms after user stops typing a valid code
@@ -119,6 +127,7 @@ export default function PivotAnalyzer() {
 
   // ─── Pivot Calculation ────────────────────────────────────────────────────
   const calculatePivot = (h, l, c) => {
+    console.log(`DEBUG: Calculating pivot for H:${h}, L:${l}, C:${c}`);
     const p = (h + l + c) / 3;
     return {
       PP: Math.round(p),
@@ -132,6 +141,7 @@ export default function PivotAnalyzer() {
   };
 
   const handleCalculate = () => {
+    console.log('DEBUG: Calculation started');
     let h = parseFloat(high);
     let l = parseFloat(low);
     const c = parseFloat(close);
@@ -159,6 +169,7 @@ export default function PivotAnalyzer() {
           throw new Error("Kalkulasi Pivot menghasilkan NaN. Pastikan input angka valid.");
         }
 
+        console.log('DEBUG: Levels calculated safely', levels);
         setResult(levels);
 
         const detectedPattern = identifyPattern({ open: o, high: h, low: l, close: c });
@@ -189,7 +200,14 @@ export default function PivotAnalyzer() {
         };
         const newHistory = [entry, ...history].slice(0, 20);
         setHistory(newHistory);
-        localStorage.setItem("pivot_history", JSON.stringify(newHistory));
+        
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem("pivot_history", JSON.stringify(newHistory));
+          }
+        } catch (storageErr) {
+          console.error("DEBUG: Failed to save to localStorage", storageErr);
+        }
 
       } catch (err) {
         console.error("Calculate Error:", err);
@@ -251,7 +269,11 @@ export default function PivotAnalyzer() {
     const entry = { id: Date.now(), stockCode: stockCode || "IDX", levels: result, date: new Date().toLocaleDateString("id-ID") };
     const newWatchlist = [entry, ...watchlist];
     setWatchlist(newWatchlist);
-    localStorage.setItem("pivot_watchlist", JSON.stringify(newWatchlist));
+    try {
+      localStorage.setItem("pivot_watchlist", JSON.stringify(newWatchlist));
+    } catch (e) {
+      console.error("DEBUG: Failed to save to watchlist", e);
+    }
     alert("Saved to Watchlist!");
   };
 
@@ -512,8 +534,8 @@ export default function PivotAnalyzer() {
               </div>
             </div>
 
-            {/* ── ANALYSIS RESULTS ──────────────────────────────────────── */}
-            {result && (
+            {/* ── ANALYSIS RESULTS ────────────────────────────────────────────────────────── */}
+            {result && isClient && (
               <div ref={analysisCardRef} className="space-y-5 animate-in slide-in-from-bottom-10 fade-in duration-1000">
 
                 {/* ══ TREND CONTEXT + RRR SUMMARY ROW ═══════════════════ */}
