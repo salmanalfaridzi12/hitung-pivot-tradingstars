@@ -132,18 +132,25 @@ export default function PivotAnalyzer() {
   };
 
   const handleCalculate = () => {
-    const h = parseFloat(high);
-    const l = parseFloat(low);
+    let h = parseFloat(high);
+    let l = parseFloat(low);
     const c = parseFloat(close);
-    const o = parseFloat(open);
-    if (isNaN(h) || isNaN(l) || isNaN(c)) return;
+    let o = parseFloat(open);
+
+    if (isNaN(h) || isNaN(l) || isNaN(c)) {
+      alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
+      return;
+    }
+
+    if (h < l) { const temp = h; h = l; l = temp; } // Safeguard inverted bounds
+    if (isNaN(o) || o === 0) o = c; // Fallback safe open price
 
     setLoading(true);
     setTimeout(() => {
       const levels = calculatePivot(h, l, c);
       setResult(levels);
 
-      const detectedPattern = identifyPattern({ open, high, low, close });
+      const detectedPattern = identifyPattern({ open: o, high: h, low: l, close: c });
       setPattern(detectedPattern);
 
       const cp = parseFloat(currentPrice) || c;
