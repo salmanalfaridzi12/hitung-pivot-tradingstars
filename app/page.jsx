@@ -142,31 +142,50 @@ export default function PivotAnalyzer() {
       return;
     }
 
-    if (h < l) { const temp = h; h = l; l = temp; } // Safeguard inverted bounds
+    if (h < l) {
+      alert("⚠️ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
+      return;
+    }
+
     if (isNaN(o) || o === 0) o = c; // Fallback safe open price
 
     setLoading(true);
     setTimeout(() => {
-      const levels = calculatePivot(h, l, c);
-      setResult(levels);
+      try {
+        const levels = calculatePivot(h, l, c);
 
-      const detectedPattern = identifyPattern({ open: o, high: h, low: l, close: c });
-      setPattern(detectedPattern);
+        // Sanity check: Ensure calculation produced valid numbers
+        if (!levels || Object.values(levels).some(val => isNaN(val))) {
+          throw new Error("Kalkulasi Pivot menghasilkan NaN. Pastikan input angka valid.");
+        }
 
-      const cp = parseFloat(currentPrice) || c;
-      const nearestLvl = Object.entries(levels).reduce((prev, curr) =>
-        Math.abs(curr[1] - cp) < Math.abs(prev[1] - cp) ? curr : prev,
-        ["PP", levels.PP]
-      );
-      const conf = getConfluenceLabel(detectedPattern, { label: nearestLvl[0], value: nearestLvl[1] });
-      setConfluence(conf);
+        setResult(levels);
 
-      if (cp <= levels.S1 && "Notification" in window && Notification.permission === "granted") {
-        new Notification("TradingStars Alert", {
-          body: `Area Buy Terdeteksi di [${stockCode || "Saham"}] — Harga menyentuh S1 (${fmt(levels.S1)})`,
-          icon: "/logo-ts.png",
-        });
+        const detectedPattern = identifyPattern({ open: o, high: h, low: l, close: c });
+        setPattern(detectedPattern);
+
+        const cp = parseFloat(currentPrice) || c;
+        const nearestLvl = Object.entries(levels).reduce((prev, curr) =>
+          Math.abs(curr[1] - cp) < Math.abs(prev[1] - cp) ? curr : prev,
+          ["PP", levels.PP]
+        );
+        const conf = getConfluenceLabel(detectedPattern, { label: nearestLvl[0], value: nearestLvl[1] });
+        setConfluence(conf);
+
+        if (cp <= levels.S1 && "Notification" in window && Notification.permission === "granted") {
+          new Notification("TradingStars Alert", {
+            body: `Area Buy Terdeteksi di [${stockCode || "Saham"}] — Harga menyentuh S1 (${fmt(levels.S1)})`,
+            icon: "/logo-ts.png",
+          });
+        }
+      } catch (err) {
+        console.error("Calculate Error:", err);
+        setResult(null);
+        alert(err.message || "Telah terjadi error struktural saat melakukan kalkulasi.");
+      } finally {
+        setLoading(false);
       }
+    }, 900);
 
       const entry = {
         id: Date.now(),
