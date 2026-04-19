@@ -201,16 +201,14 @@ export default function PivotAnalyzer() {
       }
 
       // ── Populate all fields automatically (from original Python API) ──
+      if (data.open   != null) setOpen(String(data.open));
       if (data.high   != null) setHigh(String(data.high));
       if (data.low    != null) setLow(String(data.low));
       if (data.close  != null) setClose(String(data.close));
       if (data.volume != null) setVolume(String(data.volume));
       if (data.ma20_volume != null) setMa20Volume(String(data.ma20_volume));
+      if (data.ma20_price != null && data.ma20_price > 0) setMa20Price(String(data.ma20_price));
       if (data.close != null) setCurrentPrice(String(data.close));
-
-      // Clear new fields that are not returned by the original API
-      setOpen("");
-      setMa20Price("");
 
       setFetchStatus({
         type: "success",
