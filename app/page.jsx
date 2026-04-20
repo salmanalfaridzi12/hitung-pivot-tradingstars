@@ -604,8 +604,8 @@ export default function PivotAnalyzer() {
                 {/* Visual Context (charts & broker) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-6">
-                    {/* <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} /> */}
-                    {/* <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} /> */}
+                    <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
+                    <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
                   </div>
                   <div className="space-y-6">
                     <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
@@ -638,12 +638,7 @@ export default function PivotAnalyzer() {
                         </div>
                       )}
                     </div>
-                    {/* <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} /> */}
-                    {result && isClient && (
-                      <pre className="text-xs text-green-400 p-4 overflow-x-auto bg-slate-900 rounded-xl border border-white/10 mt-4">
-                        {JSON.stringify(result, null, 2)}
-                      </pre>
-                    )}
+                    <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
                   </div>
                 </div>
 

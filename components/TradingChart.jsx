@@ -7,7 +7,12 @@ export default function TradingChart({ ohlc, levels, pattern }) {
   const chartRef = useRef(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current || !ohlc.close) return;
+    if (!chartContainerRef.current) return;
+    const o = parseFloat(ohlc.open);
+    const h = parseFloat(ohlc.high);
+    const l = parseFloat(ohlc.low);
+    const c = parseFloat(ohlc.close);
+    if (isNaN(o) || isNaN(h) || isNaN(l) || isNaN(c)) return;
 
     const chartOptions = {
       layout: {
@@ -36,7 +41,7 @@ export default function TradingChart({ ohlc, levels, pattern }) {
 
     // Mock recent price action to make it look like a chart
     const data = [];
-    const basePrice = parseFloat(ohlc.open);
+    const basePrice = o;
     const daySeconds = 86400;
     const now = Math.floor(Date.now() / 1000);
 
@@ -58,10 +63,10 @@ export default function TradingChart({ ohlc, levels, pattern }) {
     // Replace last candle with actual OHLC
     data[data.length - 1] = {
       time: now,
-      open: parseFloat(ohlc.open),
-      high: parseFloat(ohlc.high),
-      low: parseFloat(ohlc.low),
-      close: parseFloat(ohlc.close),
+      open: o,
+      high: h,
+      low: l,
+      close: c,
     };
 
     candlestickSeries.setData(data);
