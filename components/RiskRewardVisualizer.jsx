@@ -9,8 +9,6 @@ function cn(...inputs) {
 }
 
 export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
-  if (!entry || !stopLoss || !target) return null;
-
   const e = parseFloat(entry);
   const sl = parseFloat(stopLoss);
   const t = parseFloat(target);

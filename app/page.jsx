@@ -630,10 +630,10 @@ export default function PivotAnalyzer() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-6">
                     <ErrorBoundary>
-                      {/* <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} /> */}
+                      <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
                     </ErrorBoundary>
                     <ErrorBoundary>
-                      {/* <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} /> */}
+                      <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
                     </ErrorBoundary>
                   </div>
                   <div className="space-y-6">
