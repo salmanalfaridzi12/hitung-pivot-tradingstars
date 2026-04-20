@@ -299,4 +299,7 @@ async def get_stock_data(
         raise
     except Exception as e:
         print(f"Unhandled error: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error fetching stock data")
+        raise HTTPException(
+            status_code=404, 
+            detail="Terjadi error struktural sinkronisasi. Silakan gunakan Input Manual."
+        )

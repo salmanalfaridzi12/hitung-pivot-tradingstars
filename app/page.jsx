@@ -170,14 +170,19 @@ export default function PivotAnalyzer() {
   };
 
   const handleCalculate = () => {
-    console.log('DEBUG: Calculation started');
     let h = parseFloat(high);
     let l = parseFloat(low);
     const c = parseFloat(close);
     let o = parseFloat(open);
+    const ep = parseFloat(currentPrice);
 
-    if (isNaN(h) || isNaN(l) || isNaN(c)) {
-      alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
+    if (isNaN(h) || isNaN(l) || isNaN(c) || h <= 0 || l <= 0 || c <= 0) {
+      alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka di atas 0.");
+      return;
+    }
+
+    if (isNaN(ep) || ep <= 0) {
+      alert("⚠️ HARGA ENTRY TIDAK VALID: Harga saat ini (Entry) tidak boleh 0. Silakan input harga manual.");
       return;
     }
 
@@ -297,14 +302,14 @@ export default function PivotAnalyzer() {
       setFetchStatus(null);
 
       // -- Populate all fields automatically (from original Python API) --
-      if (data.open   != null) setOpen(String(data.open));
-      if (data.high   != null) setHigh(String(data.high));
-      if (data.low    != null) setLow(String(data.low));
+      if (data.open   != null && data.open > 0) setOpen(String(data.open));
+      if (data.high   != null && data.high > 0) setHigh(String(data.high));
+      if (data.low    != null && data.low > 0) setLow(String(data.low));
       
       // 2. Handle Jam Bursa: Distinguish between previous close & live price
-      if (data.prev_close != null && timeframe.toLowerCase() === "daily") {
+      if (data.prev_close != null && data.prev_close > 0 && timeframe.toLowerCase() === "daily") {
         setClose(String(data.prev_close));
-      } else if (data.close != null) {
+      } else if (data.close != null && data.close > 0) {
         setClose(String(data.close));
       }
 
@@ -375,13 +380,13 @@ export default function PivotAnalyzer() {
       // Data mutlak sukses, reset potential errors
       setFetchStatus(null);
 
-      const o = data.open != null ? String(data.open) : "";
-      const h = data.high != null ? String(data.high) : "";
-      const l = data.low != null ? String(data.low) : "";
+      const o = data.open != null && data.open > 0 ? String(data.open) : "";
+      const h = data.high != null && data.high > 0 ? String(data.high) : "";
+      const l = data.low != null && data.low > 0 ? String(data.low) : "";
       let c = "";
-      if (data.prev_close != null && timeframe.toLowerCase() === "daily") {
+      if (data.prev_close != null && data.prev_close > 0 && timeframe.toLowerCase() === "daily") {
         c = String(data.prev_close);
-      } else if (data.close != null) {
+      } else if (data.close != null && data.close > 0) {
         c = String(data.close);
       }
       
