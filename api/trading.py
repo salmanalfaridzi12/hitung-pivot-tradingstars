@@ -124,39 +124,58 @@ async def get_stock_data(
                     time.sleep(0.5)
 
         if not tv_success:
-            print(f"[YAHOO] Menggunakan proteksi Fallback ({ticker_jk})...")
+            print(f"[YAHOO] TV gagal untuk {ticker_jk}, beralih ke Yahoo...")
 
         # Fallback 1: yfinance fast_info
         if not live_price or live_price == 0:
             try:
-                if hasattr(stock, 'fast_info'):
-                    live_price = float(getattr(stock.fast_info, 'last_price', 0.0) or stock.fast_info.get('lastPrice', 0.0))
-                    live_high = float(getattr(stock.fast_info, 'day_high', 0.0) or stock.fast_info.get('dayHigh', 0.0))
-                    live_low = float(getattr(stock.fast_info, 'day_low', 0.0) or stock.fast_info.get('dayLow', 0.0))
-                    live_open = float(getattr(stock.fast_info, 'open', 0.0) or stock.fast_info.get('open', 0.0))
-                    live_prev_close = float(getattr(stock.fast_info, 'previous_close', 0.0) or stock.fast_info.get('previousClose', 0.0))
-                    live_vol = int(getattr(stock.fast_info, 'last_volume', 0) or stock.fast_info.get('lastVolume', 0))
-            except Exception:
-                pass
+                fi = stock.fast_info
+                live_price      = float(getattr(fi, 'last_price',      None) or getattr(fi, 'lastPrice',      0) or 0)
+                live_high       = float(getattr(fi, 'day_high',         None) or getattr(fi, 'dayHigh',         0) or 0)
+                live_low        = float(getattr(fi, 'day_low',          None) or getattr(fi, 'dayLow',          0) or 0)
+                live_open       = float(getattr(fi, 'open',             None) or 0)
+                live_prev_close = float(getattr(fi, 'previous_close',   None) or getattr(fi, 'previousClose',   0) or 0)
+                live_vol        = int(  getattr(fi, 'last_volume',      None) or getattr(fi, 'lastVolume',      0) or 0)
+                if live_price > 0:
+                    print(f"[FAST_INFO] Harga live via fast_info: {live_price}")
+            except Exception as e:
+                print(f"[FAST_INFO ERROR] {e}")
 
-        # Fallback 2: Yahoo Info
+        # Fallback 2: Yahoo stock.info (lebih lambat tapi lebih lengkap)
         if not live_price or live_price == 0:
             try:
                 info = stock.info
-                live_price = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0.0)
-                live_high = float(info.get("regularMarketDayHigh") or 0.0)
-                live_low = float(info.get("regularMarketDayLow") or 0.0)
-                live_open = float(info.get("regularMarketOpen") or 0.0)
-                live_prev_close = float(info.get("previousClose") or 0.0)
-                live_vol = int(info.get("regularMarketVolume") or 0)
-            except Exception:
-                pass
-        
-        # Validation for High/Low 0 or null during market open
+                live_price      = float(info.get("currentPrice")        or info.get("regularMarketPrice") or 0)
+                live_high       = float(info.get("regularMarketDayHigh") or 0)
+                live_low        = float(info.get("regularMarketDayLow")  or 0)
+                live_open       = float(info.get("regularMarketOpen")    or 0)
+                live_prev_close = float(info.get("previousClose")        or 0)
+                live_vol        = int(  info.get("regularMarketVolume")  or 0)
+                if live_price > 0:
+                    print(f"[INFO] Harga live via stock.info: {live_price}")
+                else:
+                    print(f"[INFO EMPTY] Yahoo Info kosong untuk {ticker_jk}")
+            except Exception as e:
+                print(f"[INFO ERROR] {ticker_jk}: {e}")
+
+        # Fallback 3: Coba tanpa .JK jika masih kosong (untuk saham baru/waran)
+        if not live_price or live_price == 0:
+            try:
+                raw_ticker_only = ticker.replace(".JK", "")
+                alt_stock = yf.Ticker(raw_ticker_only)
+                fi2 = alt_stock.fast_info
+                alt_price = float(getattr(fi2, 'last_price', None) or getattr(fi2, 'lastPrice', 0) or 0)
+                if alt_price > 0:
+                    live_price = alt_price
+                    print(f"[ALT TICKER] Harga ditemukan tanpa .JK: {raw_ticker_only} = {live_price}")
+            except Exception as e:
+                print(f"[ALT TICKER ERROR] {e}")
+
+        # Final validation - pastikan High/Low/Open tidak 0 bila Close ada
         if live_price > 0:
-            if not live_high or live_high == 0: live_high = live_price
-            if not live_low or live_low == 0: live_low = live_price
-            if not live_open or live_open == 0: live_open = live_prev_close if live_prev_close > 0 else live_price
+            if not live_high  or live_high  == 0: live_high  = live_price
+            if not live_low   or live_low   == 0: live_low   = live_price
+            if not live_open  or live_open  == 0: live_open  = live_prev_close if live_prev_close > 0 else live_price
 
         # ── Determine how many daily bars to aggregate ──────────────────────
         if tf == "weekly":
@@ -177,42 +196,48 @@ async def get_stock_data(
             ma_daily_bars = 60
             fetch_period  = "3mo"
 
-        # ── Fetch enough history ─────────────────────────────────────────────
+        # ── Fetch Yahoo History ───────────────────────────────────────────────
         try:
             hist = stock.history(period=fetch_period)
+            if hist.empty:
+                print(f"[YAHOO EMPTY] Riwayat {fetch_period} kosong untuk {ticker_jk}")
+            else:
+                print(f"[YAHOO OK] {len(hist)} bar ditemukan untuk {ticker_jk}")
         except Exception as e:
-            print(f"Yahoo history error: {e}")
+            print(f"[YAHOO HISTORY ERROR] {ticker_jk}: {e}")
             hist = pd.DataFrame()
 
-        # 🔥 Synthetic Fallback for Empty History (If TradingView Has The Data!)
+        # 🔥 Synthetic Fallback: history kosong tapi live_price ada (saham baru/suspensi)
         if hist.empty and live_price > 0:
-            print(f"[SYNTHETIC FIX] {ticker_jk} tidak ada history di Yahoo, generating virtual bar dari TradingView.")
+            print(f"[SYNTHETIC] Buat bar dari harga live TV/Yahoo untuk {ticker_jk}: C={live_price}")
             hist = pd.DataFrame([{
                'Open': live_open, 'High': live_high, 'Low': live_low, 'Close': live_price, 'Volume': live_vol
             }], index=[pd.Timestamp(now)])
 
-        # 🔥 DEEP SCRAPE (Force 1-minute interval if the rest failed)
-        if hist.empty and live_price == 0:
-            print(f"[DEEP SCRAPE] Melakukan pencarian ekstrim (1d, 1m) untuk {ticker_jk}...")
+        # 🔥 DEEP SCRAPE: paksa 1m interval untuk saham super baru/tidak aktif
+        if hist.empty:
+            print(f"[DEEP SCRAPE] Coba 1d interval=1m untuk {ticker_jk}...")
             try:
                 deep = stock.history(period="1d", interval="1m")
                 if not deep.empty:
-                    print(f"[DEEP SCRAPE SUCCESS] Data ekstrim 1m ditemukan untuk {ticker_jk}!")
                     live_price = float(deep['Close'].iloc[-1])
-                    live_open = float(deep['Open'].iloc[0])
-                    live_high = float(deep['High'].max())
-                    live_low = float(deep['Low'].min())
-                    live_vol = int(deep['Volume'].sum())
+                    live_open  = float(deep['Open'].iloc[0])
+                    live_high  = float(deep['High'].max())
+                    live_low   = float(deep['Low'].min())
+                    live_vol   = int(deep['Volume'].sum())
                     hist = pd.DataFrame([{
                         'Open': live_open, 'High': live_high, 'Low': live_low, 'Close': live_price, 'Volume': live_vol
                     }], index=[pd.Timestamp(now)])
+                    print(f"[DEEP SCRAPE OK] C={live_price} untuk {ticker_jk}")
+                else:
+                    print(f"[DEEP SCRAPE EMPTY] Masih kosong untuk {ticker_jk}")
             except Exception as e:
-                print(f"[DEEP SCRAPE ERROR] {e}")
+                print(f"[DEEP SCRAPE ERROR] {ticker_jk}: {e}")
 
         if hist.empty:
             raise HTTPException(
                 status_code=404, 
-                detail=f"Koneksi bermasalah: Server kehabisan cara menemukan saham {ticker}. Silakan Input Manual!"
+                detail=f"Data {ticker} tidak tersedia di semua sumber. Silakan Input Manual!"
             )
 
         has_today = not hist.empty and hist.index[-1].date() == now.date()
