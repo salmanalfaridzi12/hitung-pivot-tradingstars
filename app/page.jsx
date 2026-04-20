@@ -55,8 +55,9 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-[10px] text-red-400 font-mono">
-          Visual Component Failed: {this.state.error?.message}
+        <div className="flex flex-col items-center justify-center p-6 bg-slate-900/50 rounded-xl border border-white/5 space-y-3">
+          <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+          <p className="text-[10px] text-slate-400 font-medium tracking-widest uppercase animate-pulse">Sedang menyiapkan grafik...</p>
         </div>
       );
     }
@@ -629,10 +630,10 @@ export default function PivotAnalyzer() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-6">
                     <ErrorBoundary>
-                      <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
+                      {/* <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} /> */}
                     </ErrorBoundary>
                     <ErrorBoundary>
-                      <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
+                      {/* <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} /> */}
                     </ErrorBoundary>
                   </div>
                   <div className="space-y-6">

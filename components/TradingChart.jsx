@@ -34,8 +34,11 @@ export default function TradingChart({ ohlc, levels, pattern }) {
       },
     };
 
-    const chart = createChart(chartContainerRef.current, chartOptions);
-    const candlestickSeries = chart.addCandlestickSeries({
+    chartRef.current = createChart(chartContainerRef.current, chartOptions);
+
+    if (!chartRef.current || typeof chartRef.current.addCandlestickSeries !== "function") return;
+
+    const candlestickSeries = chartRef.current.addCandlestickSeries({
       upColor: "#22C55E",
       downColor: "#EF4444",
       borderVisible: false,
@@ -46,12 +49,13 @@ export default function TradingChart({ ohlc, levels, pattern }) {
     // Mock recent price action to make it look like a chart
     const data = [];
     const basePrice = o;
-    const daySeconds = 86400;
+    // Base reference time aligned to closest 5min block to assure strictly unique integer timestamps
     const now = Math.floor(Date.now() / 1000);
+    const timeRef = now - (now % 300);
 
-    // Generate 20 candles of random noise ending in our current OHLC
+    // Generate 20 candles of random noise ending in our current OHLC (Strictly ascending time)
     for (let i = 20; i > 0; i--) {
-      const time = now - (i * 300); // 5 min intervals
+      const time = timeRef - (i * 300); // exactly 5 mins apart
       const prevClose = i === 20 ? basePrice : data[data.length - 1].close;
       const noise = (Math.random() - 0.5) * (basePrice * 0.01);
       
@@ -65,13 +69,13 @@ export default function TradingChart({ ohlc, levels, pattern }) {
     }
 
     // Replace last candle with actual OHLC
-    data[data.length - 1] = {
-      time: now,
+    data.push({
+      time: timeRef + 300, // Ensure strictly greater than the last one
       open: o,
       high: h,
       low: l,
       close: c,
-    };
+    });
 
     candlestickSeries.setData(data);
 
@@ -114,18 +118,22 @@ export default function TradingChart({ ohlc, levels, pattern }) {
       });
     }
 
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
+    chartRef.current.timeScale().fitContent();
 
     const handleResize = () => {
-      chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
     };
 
     window.addEventListener("resize", handleResize);
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      chart.remove();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
     };
   }, [ohlc, levels, pattern]);
 
