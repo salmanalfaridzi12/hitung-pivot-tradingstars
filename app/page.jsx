@@ -742,6 +742,52 @@ export default function PivotAnalyzer() {
                     </div>
                 </div>
 
+                <div className="mt-2 text-center text-xs opacity-0"></div>
+
+                {/* â• â•  TRADINGSTARS AI SIGNAL â• â•  */}
+                {(() => {
+                   const cp = parseFloat(currentPrice || close);
+                   if (!result || isNaN(cp)) return null;
+
+                   const volStrong = volume && ma20Volume && parseFloat(volume) > parseFloat(ma20Volume);
+                   const isBull = cp > result.PP;
+                   const volatility = (result.R3 - result.S3) / result.S3;
+                   const isTrendUp = isBull && trendContext?.isBullish;
+                   
+                   let sig = null;
+                   
+                   if (cp >= result.R2 * 0.99) {
+                       sig = { text: "TAKE PROFIT: Reached Target Res 2", style: "border-yellow-500/50 bg-yellow-500/10 text-yellow-400", icon: <AlertCircle className="w-5 h-5 text-yellow-400"/> };
+                   } else if (volatility > 0.1) {
+                       sig = { text: "WAIT & SEE: High Volatility", style: "border-slate-500/50 bg-slate-500/10 text-slate-300", icon: <Activity className="w-5 h-5 text-slate-400"/> };
+                   } else if (cp <= result.S1 * 1.02 && cp >= result.S1 * 0.95 && volStrong) {
+                       sig = { text: "BUY ON WEAKNESS: Area Supp 1", style: "border-green-500/50 bg-green-500/10 text-green-400", icon: <TrendingUp className="w-5 h-5 text-green-400"/> };
+                   } else if (isTrendUp) {
+                       sig = { text: "HOLD: Strong Bullish Momentum", style: "border-blue-500/50 bg-blue-500/10 text-blue-400", icon: <Target className="w-5 h-5 text-blue-400"/> };
+                   } else {
+                       sig = { 
+                           text: isBull ? "MONITOR: Bullish Bias" : "CAUTION: Bearish Bias",
+                           style: isBull ? "border-purple-500/30 bg-purple-500/10 text-purple-400" : "border-orange-500/30 bg-orange-500/10 text-orange-400",
+                           icon: isBull ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />
+                       };
+                   }
+
+                   return (
+                     <div className={`p-4 rounded-3xl border flex items-center gap-4 shadow-xl shadow-black/40 animate-in zoom-in-95 duration-500 ${sig.style}`}>
+                        <div className="p-3 rounded-2xl bg-slate-950/40 border border-inherit shadow-inner">
+                           {sig.icon}
+                        </div>
+                        <div>
+                           <div className="flex items-center gap-1.5 mb-1.5">
+                             <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                             <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-80">TradingStars AI Signal</p>
+                           </div>
+                           <p className="text-sm font-black tracking-wide leading-tight">{sig.text}</p>
+                        </div>
+                     </div>
+                   );
+                })()}
+
                 <ErrorBoundary>
                   <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
                 </ErrorBoundary>
@@ -845,22 +891,55 @@ export default function PivotAnalyzer() {
                       <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">Potensi Balik Arah</p>
                       <p className="text-lg font-black text-orange-400">{((result.R1 - result.PP) / result.PP * 100).toFixed(2)}%</p>
                     </div>
-                    {volume && ma20Volume && (
-                      <div className="col-span-2 sm:col-span-3 pt-2 border-t border-white/5">
-                        <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest mb-1">Kekuatan Volume</p>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-700 ${parseFloat(volume) > parseFloat(ma20Volume) ? "bg-green-400" : "bg-red-400"}`}
-                              style={{ width: `${Math.min(100, (parseFloat(volume) / parseFloat(ma20Volume)) * 50)}%` }}
-                            />
+                    {volume && ma20Volume && (() => {
+                      const vol = parseFloat(volume);
+                      const avgVol = parseFloat(ma20Volume);
+                      const cp = parseFloat(currentPrice || close);
+                      const isBull = cp > result.PP;
+                      let percentage = 50;
+                      let ratio = vol / avgVol;
+                      
+                      if (vol > avgVol) {
+                         percentage = 50 + (isBull ? 1 : -1) * (Math.min(ratio - 1, 1.5) / 1.5) * 45;
+                      } else {
+                         percentage = 50 + (isBull ? 1 : -1) * (1 - ratio) * 10;
+                      }
+                      percentage = Math.max(5, Math.min(95, percentage));
+                      
+                      let color = "text-yellow-500";
+                      let bgTheme = "bg-yellow-500/10 border-yellow-500/20";
+                      let label = "Netral";
+                      if (percentage > 70) { color = "text-green-500"; bgTheme = "bg-green-500/10 border-green-500/20"; label = "Big Accumulation"; }
+                      else if (percentage < 30) { color = "text-red-500"; bgTheme = "bg-red-500/10 border-red-500/20"; label = "Big Distribution"; }
+                      else if (percentage > 50) { color = "text-green-400"; bgTheme = "bg-green-500/10 border-green-500/20"; label = "Accumulation"; }
+                      else if (percentage < 50) { color = "text-red-400"; bgTheme = "bg-red-500/10 border-red-500/20"; label = "Distribution"; }
+
+                      const rotation = (percentage / 100) * 180 - 90;
+
+                      return (
+                        <div className="col-span-2 sm:col-span-3 pt-6 pb-2 border-t border-white/5 flex flex-col items-center justify-center">
+                          <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest mb-4">Volume Power Gauge</p>
+                          <div className="relative w-40 h-20 overflow-hidden mb-3">
+                             <svg viewBox="0 0 100 50" className="w-full h-full drop-shadow-md">
+                                <path d="M 10 50 A 40 40 0 0 1 35 22" fill="none" stroke="#ef4444" strokeWidth="12" strokeLinecap="butt" className="opacity-80" />
+                                <path d="M 35 22 A 40 40 0 0 1 65 22" fill="none" stroke="#eab308" strokeWidth="12" strokeLinecap="butt" className="opacity-80" />
+                                <path d="M 65 22 A 40 40 0 0 1 90 50" fill="none" stroke="#22c55e" strokeWidth="12" strokeLinecap="butt" className="opacity-80" />
+                             </svg>
+                             <div 
+                                className="absolute bottom-0 left-1/2 w-1.5 h-[85%] -ml-[3px] origin-bottom transition-transform duration-1000 ease-out z-10"
+                                style={{ transform: `rotate(${rotation}deg)` }}
+                             >
+                                <div className="w-full h-full bg-slate-100 rounded-t-full shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                                <div className="absolute -bottom-2 -left-2 w-5 h-5 bg-slate-800 border-[3px] border-slate-300 rounded-full shadow-lg" />
+                             </div>
                           </div>
-                          <span className={`text-[10px] font-black ${parseFloat(volume) > parseFloat(ma20Volume) ? "text-green-400" : "text-red-400"}`}>
-                            {parseFloat(volume) > parseFloat(ma20Volume) ? "Di Atas Rata-Rata" : "Di Bawah Rata-Rata"}
-                          </span>
+                          
+                          <div className={`px-4 py-1.5 rounded-full border ${bgTheme} ${color}`}>
+                             <p className="text-xs font-black uppercase tracking-widest">{label}</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
 
