@@ -260,7 +260,8 @@ export default function PivotAnalyzer() {
     setFetchStatus(null);
 
     try {
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}`);
+      const tf = timeframe.toLowerCase();
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -278,16 +279,17 @@ export default function PivotAnalyzer() {
       if (data.ma20_price != null && data.ma20_price > 0) setMa20Price(String(data.ma20_price));
       if (data.close != null) setCurrentPrice(String(data.close));
 
+      const tfLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[timeframe.toLowerCase()] || timeframe;
       setFetchStatus({
         type: "success",
-        msg: `Data ${code} berhasil diisi${data.tradingDate ? " (" + data.tradingDate + ")" : ""}.`,
+        msg: `Data ${code} [${tfLabel}] berhasil diisi${data.tradingDate ? " (" + data.tradingDate + ")" : ""}.`,
       });
     } catch (err) {
       setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Coba lagi." });
     } finally {
       setFetchLoading(false);
     }
-  }, [stockCode]);
+  }, [stockCode, timeframe]);
 
   const addToWatchlist = () => {
     if (!result) return;
@@ -939,4 +941,5 @@ export default function PivotAnalyzer() {
     </main>
   );
 }
+
 
