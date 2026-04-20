@@ -276,9 +276,20 @@ export default function PivotAnalyzer() {
         }
       });
       const data = await res.json();
+      console.log('Backend Response (handleFetchData):', data);
 
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: data.error || "Fetch gagal." });
+        const errorMsg = data.detail || data.error || "Fetch gagal.";
+        if (String(errorMsg).includes("Koneksi bermasalah")) {
+          setFetchStatus({ type: "error", msg: "Data dari bursa sedang delay/diproses. Silakan coba lagi." });
+        } else {
+          setFetchStatus({ type: "error", msg: errorMsg });
+        }
+        return;
+      }
+
+      if (data.high == null || data.low == null || data.close == null || data.close === 0) {
+        setFetchStatus({ type: "error", msg: "Data emiten sedang direkap/belum utuh. Coba sebentar lagi." });
         return;
       }
 
@@ -336,9 +347,21 @@ export default function PivotAnalyzer() {
         }
       });
       const data = await res.json();
+      console.log('Backend Response (handleGiantClick):', data);
 
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: data.error || "Fetch gagal." });
+        const errorMsg = data.detail || data.error || "Fetch gagal.";
+        if (String(errorMsg).includes("Koneksi bermasalah")) {
+          setFetchStatus({ type: "error", msg: "Data dari bursa sedang delay/diproses. Silakan coba lagi." });
+        } else {
+          setFetchStatus({ type: "error", msg: errorMsg });
+        }
+        setFetchLoading(false);
+        return;
+      }
+
+      if (data.high == null || data.low == null || data.close == null || data.close === 0) {
+        setFetchStatus({ type: "error", msg: "Data emiten sedang direkap/belum utuh. Coba sebentar lagi." });
         setFetchLoading(false);
         return;
       }
