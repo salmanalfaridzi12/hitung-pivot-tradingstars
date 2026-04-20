@@ -11,7 +11,6 @@ import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 const RiskRewardVisualizer = dynamic(() => import("../components/RiskRewardVisualizer"), { ssr: false });
-const BrokerSummary = dynamic(() => import("../components/BrokerSummary"), { ssr: false });
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 import StoryExportCard from "../components/StoryExportCard";
 
@@ -628,17 +627,12 @@ export default function PivotAnalyzer() {
 
                 {/* Visual Context (charts & broker) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-6">
-                    <ErrorBoundary>
-                      <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
-                    </ErrorBoundary>
-                    <ErrorBoundary>
-                      <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
-                    </ErrorBoundary>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
-                      <div className="flex justify-between items-center mb-4">
+                  <ErrorBoundary>
+                    <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
+                  </ErrorBoundary>
+                  
+                  <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
+                    <div className="flex justify-between items-center mb-4">
                         <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Arah Trend</p>
                         {confluence && (
                           <div className="px-2 py-1 rounded bg-green-500/10 border border-green-500/30 text-[9px] font-black text-green-400 uppercase animate-pulse">
@@ -667,11 +661,11 @@ export default function PivotAnalyzer() {
                         </div>
                       )}
                     </div>
-                    <ErrorBoundary>
-                      <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
-                    </ErrorBoundary>
-                  </div>
                 </div>
+
+                <ErrorBoundary>
+                  <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
+                </ErrorBoundary>
 
                 {/* ══ PIVOT LADDER with Demand / Supply Zones ════════════ */}
                 <div className="bg-slate-900/40 rounded-3xl border border-white/5 overflow-hidden">
