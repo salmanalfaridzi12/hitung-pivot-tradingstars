@@ -1,40 +1,29 @@
 import codecs
-import sys
+import re
 
 filepath = r"app/page.jsx"
 
-try:
-    # Read the file with utf-8 encoding (if it was saved as utf-8)
-    with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
-except Exception as e:
-    print("Could not read as utf-8, trying latin1...", e)
-    with open(filepath, "r", encoding="latin1") as f:
-        content = f.read()
+with open(filepath, "r", encoding="utf-8") as f:
+    content = f.read()
 
-# Known mojibake mappings that appeared in the file
-replacements = {
-    "â€“": "-",
-    "â€”": "-",
-    "âœ…": "✅",
-    "âš¡": "⚡",
-    "âš ï¸ ": "⚠️",
-    "âš ": "⚠️",  # alternative without variation selector
-    "â–²": "▲",
-    "â–¼": "▼",
-    "â˜…": "★",
-    "â€¢": "•",
-    "â”€": "-",
-    "â• ": "=",
-    "Ã¢": ""
-}
+def clean_warning_text(text, replacement):
+    # This will match the text even if it has arbitrary garbage before it
+    # We look for "DATA TIDAK VALID", "Sedang Koreksi", "Risk Tinggi", "Tech Rebound"
+    # and we forcefully replace the exact line logic.
+    pass
 
-original_len = len(content)
-for k, v in replacements.items():
-    content = content.replace(k, v)
+# We can just do regex replacement for the whole line since we know exactly what is there.
+content = re.sub(r'alert\(".*?DATA TIDAK VALID:', 'alert("⚠️ DATA TIDAK VALID:', content)
+content = re.sub(r'alert\(".*?DATA TIDAK MASUK AKAL:', 'alert("⚠️ DATA TIDAK MASUK AKAL:', content)
 
-# Re-write file securely as true UTF-8
+# Risk tinggi line
+content = re.sub(r'\? ".*Risk Tinggi"', '? "⚠️ Risk Tinggi"', content)
+
+# Badges
+content = re.sub(r'badge = ".*Tech Rebound";', 'badge = "⚠️ Tech Rebound";', content)
+content = re.sub(r'badge = ".*Sedang Koreksi";', 'badge = "⚠️ Sedang Koreksi";', content)
+
 with open(filepath, "w", encoding="utf-8") as f:
     f.write(content)
 
-print(f"Done. File cleaned and saved as UTF-8.")
+print("Done with regex replacements.")

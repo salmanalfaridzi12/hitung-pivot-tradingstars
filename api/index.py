@@ -125,15 +125,23 @@ async def get_stock_data(
                     'Close': [live_price], 'Volume': [live_vol]
                 }, index=[pd.Timestamp(now)])
                 hist = pd.concat([hist, new_row])
+                has_today = True
 
-        if len(hist) < bars_needed:
+        # ── Define Completed History Pivot Base ──────────────────────────────
+        # If market is strictly open (before 16:00 local time), today's candle is NOT complete.
+        # Pivot calculation requires completed period to project the next session.
+        is_market_running = has_today and now.hour < 16
+        
+        completed_hist = hist.iloc[:-1] if is_market_running else hist
+
+        if len(completed_hist) < bars_needed:
             raise HTTPException(
                 status_code=404,
-                detail=f"Not enough history for {tf} aggregation ({len(hist)} bars, need {bars_needed})"
+                detail=f"Not enough completed history for {tf} aggregation ({len(completed_hist)} bars, need {bars_needed})"
             )
 
-        # ── Build current-period OHLCV ───────────────────────────────────────
-        period_bars = hist.tail(bars_needed)
+        # ── Build COMPLETED period OHLCV (T-1 Pivot Reference) ───────────────
+        period_bars = completed_hist.tail(bars_needed)
         ohlcv = aggregate_ohlcv(period_bars)
 
         if not ohlcv or ohlcv["close"] == 0:
@@ -165,13 +173,11 @@ async def get_stock_data(
             ma20_volume = int(round(ma20_volume_raw / 100))
 
         # 2. Handle Jam Bursa: Distinguish previous close vs current price
-        prev_close_val = live_prev_close
-        if not prev_close_val and len(hist) > 1:
-            prev_close_val = float(hist.iloc[-2]['Close']) if tf == "daily" else float(hist.iloc[-bars_needed - 1]['Close']) if len(hist) > bars_needed else ohlcv["close"]
-        if not prev_close_val:
-            prev_close_val = ohlcv["close"]
-
-        current_price_val = live_price if live_price > 0 else ohlcv["close"]
+        # The T-1 Pivot reference close IS our ohlcv["close"]. 
+        prev_close_val = ohlcv["close"]
+        
+        # Current true running price for real-time Signal checking
+        current_price_val = live_price if live_price > 0 else (hist.iloc[-1]["Close"] if has_today else ohlcv["close"])
 
         return {
             "ticker":      ticker_jk,
