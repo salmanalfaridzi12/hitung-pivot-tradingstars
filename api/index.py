@@ -45,6 +45,43 @@ async def get_stock_data(
         tz = pytz.timezone("Asia/Jakarta")
         now = datetime.datetime.now(tz)
 
+        # ── 1 & 3 & 4. Force Real-time & Provider Check & Validation ────────
+        live_price = 0.0
+        live_high = 0.0
+        live_low = 0.0
+        live_open = 0.0
+        live_prev_close = 0.0
+        live_vol = 0
+
+        try:
+            if hasattr(stock, 'fast_info'):
+                live_price = float(getattr(stock.fast_info, 'last_price', 0.0) or stock.fast_info.get('lastPrice', 0.0))
+                live_high = float(getattr(stock.fast_info, 'day_high', 0.0) or stock.fast_info.get('dayHigh', 0.0))
+                live_low = float(getattr(stock.fast_info, 'day_low', 0.0) or stock.fast_info.get('dayLow', 0.0))
+                live_open = float(getattr(stock.fast_info, 'open', 0.0) or stock.fast_info.get('open', 0.0))
+                live_prev_close = float(getattr(stock.fast_info, 'previous_close', 0.0) or stock.fast_info.get('previousClose', 0.0))
+                live_vol = int(getattr(stock.fast_info, 'last_volume', 0) or stock.fast_info.get('lastVolume', 0))
+        except Exception:
+            pass
+
+        if not live_price or live_price == 0:
+            try:
+                info = stock.info
+                live_price = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0.0)
+                live_high = float(info.get("regularMarketDayHigh") or 0.0)
+                live_low = float(info.get("regularMarketDayLow") or 0.0)
+                live_open = float(info.get("regularMarketOpen") or 0.0)
+                live_prev_close = float(info.get("previousClose") or 0.0)
+                live_vol = int(info.get("regularMarketVolume") or 0)
+            except Exception:
+                pass
+        
+        # Validation for High/Low 0 or null during market open
+        if live_price > 0:
+            if not live_high or live_high == 0: live_high = live_price
+            if not live_low or live_low == 0: live_low = live_price
+            if not live_open or live_open == 0: live_open = live_prev_close if live_prev_close > 0 else live_price
+
         # ── Determine how many daily bars to aggregate ──────────────────────
         if tf == "weekly":
             # Last 5 trading days = 1 week candle
@@ -70,9 +107,24 @@ async def get_stock_data(
         if hist.empty:
             raise HTTPException(status_code=404, detail=f"No data for {ticker}")
 
-        # Drop today's incomplete candle if market still open
-        if now.hour < 16 and not hist.empty and hist.index[-1].date() == now.date():
-            hist = hist[:-1]
+        has_today = not hist.empty and hist.index[-1].date() == now.date()
+
+        # Update delayed history with real-time fast_info
+        if live_price > 0:
+            if has_today:
+                hist.iloc[-1, hist.columns.get_loc('Open')] = live_open
+                hist.iloc[-1, hist.columns.get_loc('High')] = max(live_high, float(hist.iloc[-1]['High']))
+                hl_low = float(hist.iloc[-1]['Low'])
+                hist.iloc[-1, hist.columns.get_loc('Low')] = min(live_low, hl_low) if hl_low > 0 else live_low
+                hist.iloc[-1, hist.columns.get_loc('Close')] = live_price
+                hist.iloc[-1, hist.columns.get_loc('Volume')] = max(live_vol, int(hist.iloc[-1]['Volume']))
+            elif now.hour >= 9 and now.date().weekday() < 5:
+                # Add today if missing entirely during market hours
+                new_row = pd.DataFrame({
+                    'Open': [live_open], 'High': [live_high], 'Low': [live_low],
+                    'Close': [live_price], 'Volume': [live_vol]
+                }, index=[pd.Timestamp(now)])
+                hist = pd.concat([hist, new_row])
 
         if len(hist) < bars_needed:
             raise HTTPException(
@@ -112,6 +164,15 @@ async def get_stock_data(
         if pd.notna(ma20_volume_raw):
             ma20_volume = int(round(ma20_volume_raw / 100))
 
+        # 2. Handle Jam Bursa: Distinguish previous close vs current price
+        prev_close_val = live_prev_close
+        if not prev_close_val and len(hist) > 1:
+            prev_close_val = float(hist.iloc[-2]['Close']) if tf == "daily" else float(hist.iloc[-bars_needed - 1]['Close']) if len(hist) > bars_needed else ohlcv["close"]
+        if not prev_close_val:
+            prev_close_val = ohlcv["close"]
+
+        current_price_val = live_price if live_price > 0 else ohlcv["close"]
+
         return {
             "ticker":      ticker_jk,
             "timeframe":   tf,
@@ -119,6 +180,8 @@ async def get_stock_data(
             "high":        round(ohlcv["high"],  2),
             "low":         round(ohlcv["low"],   2),
             "close":       round(ohlcv["close"], 2),
+            "prev_close":  round(prev_close_val, 2),
+            "current_price": round(current_price_val, 2),
             "volume":      int(ohlcv["volume"] / 100),
             "ma20_volume": ma20_volume,
             "ma20_price":  round(ma20_price) if ma20_price > 0 else 0,

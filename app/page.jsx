@@ -262,7 +262,16 @@ export default function PivotAnalyzer() {
 
     try {
       const tf = timeframe.toLowerCase();
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`);
+      // 1. Force Real-time: attach timestamp & no-store headers
+      const timestamp = new Date().getTime();
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}&t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -274,11 +283,23 @@ export default function PivotAnalyzer() {
       if (data.open   != null) setOpen(String(data.open));
       if (data.high   != null) setHigh(String(data.high));
       if (data.low    != null) setLow(String(data.low));
-      if (data.close  != null) setClose(String(data.close));
+      
+      // 2. Handle Jam Bursa: Distinguish between previous close & live price
+      if (data.prev_close != null && timeframe.toLowerCase() === "daily") {
+        setClose(String(data.prev_close));
+      } else if (data.close != null) {
+        setClose(String(data.close));
+      }
+
       if (data.volume != null) setVolume(String(data.volume));
       if (data.ma20_volume != null) setMa20Volume(String(data.ma20_volume));
       if (data.ma20_price != null && data.ma20_price > 0) setMa20Price(String(data.ma20_price));
-      if (data.close != null) setCurrentPrice(String(data.close));
+      
+      if (data.current_price != null && data.current_price > 0) {
+        setCurrentPrice(String(data.current_price));
+      } else if (data.close != null) {
+        setCurrentPrice(String(data.close));
+      }
 
       const tfLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[timeframe.toLowerCase()] || timeframe;
       setFetchStatus({
