@@ -267,18 +267,24 @@ export default function PivotAnalyzer() {
     setVolume(""); setMa20Volume(""); setMa20Price(""); setCurrentPrice("");
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const tf = timeframe.toLowerCase();
       const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
         cache: 'no-store',
+        signal: controller.signal,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
         }
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
+        setFetchStatus({ type: "error", msg: data.detail || data.error || "Data emiten tidak ditemukan. Silakan Input Manual!" });
         return;
       }
 
@@ -318,7 +324,11 @@ export default function PivotAnalyzer() {
         msg: `Data ${code} [${tfLabel}] berhasil diisi${data.tradingDate ? " (" + data.tradingDate + ")" : ""}.`,
       });
     } catch (err) {
-      setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Coba lagi." });
+      if (err.name === 'AbortError') {
+        setFetchStatus({ type: "error", msg: "Server Sibuk (Timeout). Silakan Input Manual!" });
+      } else {
+        setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Server butuh waktu, silakan Input Manual!" });
+      }
     } finally {
       setFetchLoading(false);
     }
@@ -333,19 +343,25 @@ export default function PivotAnalyzer() {
     setResult(null); // Force screen to loading state
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const tf = timeframe.toLowerCase();
       const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
         cache: 'no-store',
+        signal: controller.signal,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
         }
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
 
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
+        setFetchStatus({ type: "error", msg: data.detail || data.error || "Data tidak ditemukan. Silakan Input Manual!" });
         setFetchLoading(false);
         return;
       }
@@ -447,7 +463,11 @@ export default function PivotAnalyzer() {
          }, 300);
       }
     } catch (err) {
-       setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Coba lagi." });
+       if (err.name === 'AbortError') {
+         setFetchStatus({ type: "error", msg: "Server Sibuk (Timeout). Silakan Input Manual!" });
+       } else {
+         setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Silakan Input Manual!" });
+       }
     } finally {
        setFetchLoading(false);
     }

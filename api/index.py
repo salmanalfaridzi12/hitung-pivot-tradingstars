@@ -188,10 +188,28 @@ async def get_stock_data(
                'Open': live_open, 'High': live_high, 'Low': live_low, 'Close': live_price, 'Volume': live_vol
             }], index=[pd.Timestamp(now)])
 
+        # 🔥 DEEP SCRAPE (Force 1-minute interval if the rest failed)
+        if hist.empty and live_price == 0:
+            print(f"[DEEP SCRAPE] Melakukan pencarian ekstrim (1d, 1m) untuk {ticker_jk}...")
+            try:
+                deep = stock.history(period="1d", interval="1m")
+                if not deep.empty:
+                    print(f"[DEEP SCRAPE SUCCESS] Data ekstrim 1m ditemukan untuk {ticker_jk}!")
+                    live_price = float(deep['Close'].iloc[-1])
+                    live_open = float(deep['Open'].iloc[0])
+                    live_high = float(deep['High'].max())
+                    live_low = float(deep['Low'].min())
+                    live_vol = int(deep['Volume'].sum())
+                    hist = pd.DataFrame([{
+                        'Open': live_open, 'High': live_high, 'Low': live_low, 'Close': live_price, 'Volume': live_vol
+                    }], index=[pd.Timestamp(now)])
+            except Exception as e:
+                print(f"[DEEP SCRAPE ERROR] {e}")
+
         if hist.empty:
             raise HTTPException(
                 status_code=404, 
-                detail=f"Koneksi bermasalah: Kedua sumber penyedia data (TradingView & Yahoo Finance) gagal merespon untuk saham {ticker}. Silakan coba lagi dalam beberapa menit."
+                detail=f"Koneksi bermasalah: Server kehabisan cara menemukan saham {ticker}. Silakan Input Manual!"
             )
 
         has_today = not hist.empty and hist.index[-1].date() == now.date()
