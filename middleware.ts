@@ -2,12 +2,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // ═══════════════════════════════════════════════════════════════
-  // [BYPASS ACTIVE] - Matikan untuk restore verifikasi Telegram
-  // Hapus 3 baris di bawah ini untuk mengembalikan mode aman
-  return NextResponse.next();
-  // ═══════════════════════════════════════════════════════════════
-
   // Ambil token dari cookie tg_member_session
   const sessionCookie = request.cookies.get('tg_member_session');
   const { pathname } = request.nextUrl;
