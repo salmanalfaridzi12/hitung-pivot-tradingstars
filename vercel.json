@@ -1,6 +1,6 @@
 {
   "functions": {
-    "trading.py": {
+    "api/trading.py": {
       "maxDuration": 60
     }
   }
