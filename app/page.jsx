@@ -1200,6 +1200,8 @@ export default function PivotAnalyzer() {
               ))
             )}
           </div>
+        )}
+
         {/* ══ THE GIANTS TAB ═══════════════════════════════════════════════════════════════════════ */}
         {tab === "giants" && (
           <div className="animate-in fade-in slide-in-from-top-4 duration-700">
