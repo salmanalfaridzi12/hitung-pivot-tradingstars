@@ -140,15 +140,18 @@ export default function PivotAnalyzer() {
     };
   }, [result, currentPrice, close, ma20Price, stockCode]);
 
-  // â”€â”€â”€ Derived: RRR Calculation (robust) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ Derived: RRR Calculation (robust) â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const calcRRR = useMemo(() => {
     if (!result) return null;
     const cp = parseFloat(currentPrice) || parseFloat(close);
     if (isNaN(cp) || cp <= 0) return null;
-    const risk = cp - result.S1;   // downside to S1
+    
+    let risk = cp - result.S1;   // downside to S1
     const reward = result.R1 - cp; // upside to R1
-    if (risk <= 0 || reward <= 0) return null; // guard: must be positive
-    return (reward / risk).toFixed(2);
+    
+    if (risk === 0) risk = 0.0001; // guard: prevent divide by zero
+    
+    return Math.abs(reward / risk).toFixed(2);
   }, [result, currentPrice, close]);
 
   // â”€â”€â”€ Pivot Calculation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -692,7 +695,11 @@ export default function PivotAnalyzer() {
                 {/* Visual Context (charts & broker) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <ErrorBoundary>
-                    <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
+                    <RiskRewardVisualizer 
+                      entry={parseFloat(currentPrice) || parseFloat(close)} 
+                      stopLoss={result.S1} 
+                      target={result.R1} 
+                    />
                   </ErrorBoundary>
                   
                   <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
