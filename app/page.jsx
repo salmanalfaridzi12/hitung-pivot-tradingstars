@@ -14,14 +14,14 @@ const RiskRewardVisualizer = dynamic(() => import("../components/RiskRewardVisua
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 import StoryExportCard from "../components/StoryExportCard";
 
-// â”€â”€â”€ Helper Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const fmt = (n) => (n != null ? n.toLocaleString("id-ID") : "â€”");
+// --- Helper Utilities --------------------------------------------------------
+const fmt = (n) => (n != null ? n.toLocaleString("id-ID") : "-");
 const fmtDec = (n) =>
   n != null
     ? n.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-    : "â€”";
+    : "-";
 
-// â”€â”€â”€ Input Field Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Input Field Component ---------------------------------------------------
 function InputField({ label, value, onChange, type = "number", color = "", placeholder = "", labelClass = "text-slate-500", borderClass = "border-white/10", ringClass = "focus:ring-purple-500" }) {
   return (
     <div className="space-y-2">
@@ -39,7 +39,7 @@ function InputField({ label, value, onChange, type = "number", color = "", place
   );
 }
 
-// â”€â”€â”€ Error Boundary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Error Boundary ------------------------------------------------------------
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -64,9 +64,9 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Main Component -----------------------------------------------------------
 export default function PivotAnalyzer() {
-  // â”€â”€ State: OHLC Inputs
+  // -- State: OHLC Inputs
   const [stockCode, setStockCode] = useState("");
   const [high, setHigh] = useState("");
   const [low, setLow] = useState("");
@@ -77,14 +77,14 @@ export default function PivotAnalyzer() {
   const [ma20Price, setMa20Price] = useState("");
   const [currentPrice, setCurrentPrice] = useState("");
 
-  // â”€â”€ State: Timeframe
+  // -- State: Timeframe
   const [timeframe, setTimeframe] = useState("DAILY");
 
-  // â”€â”€ State: Auto-Fill
+  // -- State: Auto-Fill
   const [fetchLoading, setFetchLoading] = useState(false);
   const [fetchStatus, setFetchStatus] = useState(null); // null | { type: 'success'|'error', msg: string }
 
-  // â”€â”€ State: Application
+  // -- State: Application
   const [tab, setTab] = useState("main");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -95,10 +95,10 @@ export default function PivotAnalyzer() {
   const [isClient, setIsClient] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
-  // â”€â”€ Refs
+  // -- Refs
   const analysisCardRef = useRef(null);
 
-  // â”€â”€ Load persisted data
+  // -- Load persisted data
   useEffect(() => {
     setIsClient(true);
     try {
@@ -114,10 +114,10 @@ export default function PivotAnalyzer() {
     }
   }, []);
 
-  // â”€â”€ Debounced Auto-Fill: fires 800ms after user stops typing a valid code
+  // -- Debounced Auto-Fill: fires 800ms after user stops typing a valid code
   useEffect(() => {
     const code = stockCode.trim();
-    // Only trigger if 2â€“6 chars (typical IDX stock codes are 4 chars)
+    // Only trigger if 2-6 chars (typical IDX stock codes are 4 chars)
     if (code.length < 2 || code.length > 6) return;
     const timer = setTimeout(() => {
       handleAutoFill();
@@ -126,7 +126,7 @@ export default function PivotAnalyzer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockCode]);
 
-  // â”€â”€â”€ Derived: Trend Context (Current Price vs MA20 Price) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Derived: Trend Context (Current Price vs MA20 Price) -----------------
   const trendContext = useMemo(() => {
     if (!result) return null;
     const cp = parseFloat(currentPrice) || parseFloat(close);
@@ -136,11 +136,11 @@ export default function PivotAnalyzer() {
     const isBullish = !isNaN(ma) && ma > 0 ? cp > ma : cp > result.PP;
     return {
       isBullish,
-      label: `${stockCode || "Stock"} â€“ ${isBullish ? "Tren Naik" : "Tren Turun"}`,  
+      label: `${stockCode || "Stock"} - ${isBullish ? "Tren Naik" : "Tren Turun"}`,  
     };
   }, [result, currentPrice, close, ma20Price, stockCode]);
 
-  // â”€â”€â”€ Derived: RRR Calculation (robust) â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Derived: RRR Calculation (robust) â””-------------------------------
   const calcRRR = useMemo(() => {
     if (!result) return null;
     const cp = parseFloat(currentPrice) || parseFloat(close);
@@ -154,7 +154,7 @@ export default function PivotAnalyzer() {
     return Math.abs(reward / risk).toFixed(2);
   }, [result, currentPrice, close]);
 
-  // â”€â”€â”€ Pivot Calculation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
     console.log(`DEBUG: Calculating pivot for H:${h}, L:${l}, C:${c}`);
     const p = (h + l + c) / 3;
@@ -177,12 +177,12 @@ export default function PivotAnalyzer() {
     let o = parseFloat(open);
 
     if (isNaN(h) || isNaN(l) || isNaN(c)) {
-      alert("âš ï¸ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
+      alert("⚠️ï¸ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
       return;
     }
 
     if (h < l) {
-      alert("âš ï¸ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
+      alert("⚠️ï¸ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
       return;
     }
 
@@ -214,7 +214,7 @@ export default function PivotAnalyzer() {
 
         if (cp <= levels.S1 && "Notification" in window && Notification.permission === "granted") {
           new Notification("TradingStars Alert", {
-            body: `Area Buy Terdeteksi di [${stockCode || "Saham"}] â€” Harga menyentuh S1 (${fmt(levels.S1)})`,
+            body: `Area Buy Terdeteksi di [${stockCode || "Saham"}] - Harga menyentuh S1 (${fmt(levels.S1)})`,
             icon: "/logo-ts.png",
           });
         }
@@ -255,7 +255,7 @@ export default function PivotAnalyzer() {
     setFetchStatus(null);
   };
 
-  // â”€â”€â”€ Auto-Fill: Fetch OHLCV + MA20 from Yahoo Finance via API route â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Auto-Fill: Fetch OHLCV + MA20 from Yahoo Finance via API route --------
   const handleAutoFill = useCallback(async () => {
     const code = stockCode.trim().toUpperCase();
     if (!code) return;
@@ -282,7 +282,7 @@ export default function PivotAnalyzer() {
         return;
       }
 
-      // â”€â”€ Populate all fields automatically (from original Python API) â”€â”€
+      // -- Populate all fields automatically (from original Python API) --
       if (data.open   != null) setOpen(String(data.open));
       if (data.high   != null) setHigh(String(data.high));
       if (data.low    != null) setLow(String(data.low));
@@ -358,7 +358,7 @@ export default function PivotAnalyzer() {
     }
   };
 
-  // â”€â”€â”€ Pivot Ladder Row Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Pivot Ladder Row Config ----------------------------------------------
   const pivotRows = result
     ? [
         { l: "R3", v: result.R3, c: "text-orange-500", b: "bg-orange-500/5", bar: "bg-orange-500/30" },
@@ -371,7 +371,7 @@ export default function PivotAnalyzer() {
       ]
     : [];
 
-  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // --- Render ---------------------------------------------------------------
   return (
     <main className="min-h-screen bg-[#09090b] text-white p-4 pb-24 font-sans selection:bg-purple-500/30">
 
@@ -440,7 +440,7 @@ export default function PivotAnalyzer() {
 
       <div className="max-w-xl mx-auto space-y-6">
 
-        {/* â”€â”€ Navigation Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* -- Navigation Tabs ----------------------------------------------- */}
         <nav className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 backdrop-blur-md">
           {[
             { id: "main",      label: "Analysis", icon: Zap     },
@@ -466,7 +466,7 @@ export default function PivotAnalyzer() {
         {tab === "main" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-6">
 
-            {/* â”€â”€ DATA OHLC Input Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* -- DATA OHLC Input Panel ---------------------------------- */}
             <div className="bg-slate-900/40 p-6 rounded-3xl border border-white/5 backdrop-blur-xl">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -588,7 +588,7 @@ export default function PivotAnalyzer() {
                     className="w-full bg-slate-950/50 border border-indigo-500/20 rounded-2xl px-4 py-3 text-sm font-black text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
                 </div>
 
-                {/* â˜… MA20 Price â€” NEW FIELD â˜… */}
+                {/* ★ MA20 Price - NEW FIELD ★ */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-amber-500/90 uppercase ml-2 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
@@ -626,7 +626,7 @@ export default function PivotAnalyzer() {
               </div>
             </div>
 
-            {/* â”€â”€ ANALYSIS RESULTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* -- ANALYSIS RESULTS ---------------------------------------------------------- */}
             {result && isClient && (
               <div ref={analysisCardRef} className="space-y-5 animate-in slide-in-from-bottom-10 fade-in duration-1000">
 
@@ -651,7 +651,7 @@ export default function PivotAnalyzer() {
                       <p className={`text-[11px] font-black leading-tight ${
                         trendContext?.isBullish ? "text-green-400" : "text-red-400"
                       }`}>
-                        {trendContext?.label ?? `${stockCode || "Stock"} â€“ N/A`}
+                        {trendContext?.label ?? `${stockCode || "Stock"} - N/A`}
                       </p>
                     </div>
                     {ma20Price && (
@@ -678,10 +678,10 @@ export default function PivotAnalyzer() {
                         </p>
                         <p className="text-[9px] text-slate-300 font-medium mt-1">
                           {parseFloat(calcRRR) >= 2
-                            ? "âœ… Setup Favorit"
+                            ? "✅ Setup Favorit"
                             : parseFloat(calcRRR) >= 1
-                            ? "âš¡ Setup Layak"
-                            : "âš ï¸ Risk Tinggi"}
+                            ? "⚡ Setup Layak"
+                            : "⚠️ï¸ Risk Tinggi"}
                         </p>
                       </div>
                     ) : (
@@ -709,8 +709,8 @@ export default function PivotAnalyzer() {
                            const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
                            const isMa20Bullish = trendContext?.isBullish;
                            let badge = null;
-                           if (isPivotBullish && !isMa20Bullish) badge = "âš ï¸ Tech Rebound";
-                           if (!isPivotBullish && isMa20Bullish) badge = "âš ï¸ Sedang Koreksi";
+                           if (isPivotBullish && !isMa20Bullish) badge = "⚠️ï¸ Tech Rebound";
+                           if (!isPivotBullish && isMa20Bullish) badge = "⚠️ï¸ Sedang Koreksi";
                            
                            return (
                              <div className="flex gap-2 items-center">
@@ -772,7 +772,7 @@ export default function PivotAnalyzer() {
 
                 <div className="mt-2 text-center text-xs opacity-0"></div>
 
-                {/* â• â•  TRADINGSTARS AI SIGNAL â• â•  */}
+                {/* == TRADINGSTARS AI SIGNAL == */}
                 {(() => {
                    const cp = parseFloat(currentPrice || close);
                    if (!result || isNaN(cp)) return null;
@@ -843,14 +843,14 @@ export default function PivotAnalyzer() {
                   <div className="divide-y divide-white/5">
                     {pivotRows.map((row) => (
                       <React.Fragment key={row.l}>
-                        {/* â”€â”€ Normal Pivot Row â”€â”€ */}
+                        {/* -- Normal Pivot Row -- */}
                         <div className={`flex items-center justify-between px-4 py-3.5 group hover:bg-white/5 transition-all ${row.b}`}>
                           <div className="flex items-center gap-3">
                             {/* Label badge */}
                             <span className={`w-8 text-[10px] font-black p-1 rounded text-center border border-current/20 flex-shrink-0 ${row.c}`}>
                               {row.l}
                             </span>
-                            {/* Mini progress bar â€” hidden on very small screens */}
+                            {/* Mini progress bar - hidden on very small screens */}
                             <div className="w-14 h-1.5 bg-slate-800 rounded-full overflow-hidden hidden xs:block sm:block">
                               <div
                                 className={`h-full rounded-full ${row.bar} transition-all duration-700`}
@@ -875,25 +875,25 @@ export default function PivotAnalyzer() {
                           </div>
                         </div>
 
-                        {/* â”€â”€ Supply Area Zone Banner (after R2, before R1) â”€â”€ */}
+                        {/* -- Supply Area Zone Banner (after R2, before R1) -- */}
                         {row.supplyZoneAfter && (
                           <div className="relative bg-red-500/10 border-l-4 border-red-500/40 px-5 py-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">â–² Zona Jual (Supply)</span>
+                              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">▲ Zona Jual (Supply)</span>
                             </div>
-                            <span className="text-[9px] text-red-400/60 font-medium italic">R1 â€” R2 Zone</span>
+                            <span className="text-[9px] text-red-400/60 font-medium italic">R1 - R2 Zone</span>
                           </div>
                         )}
 
-                        {/* â”€â”€ Demand Area Zone Banner (after S1, before S2) â”€â”€ */}
+                        {/* -- Demand Area Zone Banner (after S1, before S2) -- */}
                         {row.demandZoneAfter && (
                           <div className="relative bg-green-500/10 border-l-4 border-green-500/40 px-5 py-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                              <span className="text-[9px] font-black text-green-400 uppercase tracking-widest">â–¼ Zona Beli (Demand)</span>
+                              <span className="text-[9px] font-black text-green-400 uppercase tracking-widest">▼ Zona Beli (Demand)</span>
                             </div>
-                            <span className="text-[9px] text-green-400/60 font-medium italic">S1 â€” S2 Zone</span>
+                            <span className="text-[9px] text-green-400/60 font-medium italic">S1 - S2 Zone</span>
                           </div>
                         )}
                       </React.Fragment>
@@ -901,7 +901,7 @@ export default function PivotAnalyzer() {
                   </div>
                 </div>
 
-                {/* â”€â”€ BANDAR POWER DETECTOR / Strategic Insights â”€â”€â”€â”€â”€â”€â”€ */}
+                {/* -- BANDAR POWER DETECTOR / Strategic Insights ------- */}
                 <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 p-6 rounded-3xl border border-purple-500/20">
                   <h3 className="text-sm font-black text-purple-400 uppercase mb-5 tracking-tighter flex items-center gap-2">
                     <Zap className="w-4 h-4" /> Bandar Power Detector
@@ -1094,7 +1094,7 @@ export default function PivotAnalyzer() {
             </div>
             <div>
               <p className="text-xs font-black tracking-tight">{stockCode || "ANALYSIS"} LIVE</p>
-              <p className="text-[9px] text-slate-300 font-medium uppercase">{timeframe} â€¢ Harga Tengah Ditemukan</p>
+              <p className="text-[9px] text-slate-300 font-medium uppercase">{timeframe} • Harga Tengah Ditemukan</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -1108,7 +1108,7 @@ export default function PivotAnalyzer() {
           </div>
         </div>
       )}
-      {/* â• â•  GUIDE MODAL â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */}
+      {/* == GUIDE MODAL ===================== */}
       {isGuideOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-slate-900 border border-purple-500/20 rounded-3xl w-full max-w-md shadow-2xl shadow-purple-900/20 overflow-hidden flex flex-col max-h-[85vh]">
