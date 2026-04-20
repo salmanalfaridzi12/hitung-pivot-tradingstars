@@ -1200,6 +1200,102 @@ export default function PivotAnalyzer() {
               ))
             )}
           </div>
+        {/* ══ THE GIANTS TAB ═══════════════════════════════════════════════════════════════════════ */}
+        {tab === "giants" && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-700">
+            <div className="bg-slate-900/60 p-6 sm:p-8 rounded-3xl border border-amber-500/20 shadow-[0_0_40px_rgba(245,158,11,0.05)] text-center relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-amber-500/10 blur-[80px] pointer-events-none" />
+              
+              <div className="relative z-10 mb-8 max-w-sm mx-auto">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/30 mb-4 animate-bounce hover:animate-none">
+                  <Star className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-600 uppercase tracking-widest leading-tight">
+                  The Giants Watchlist
+                </h2>
+                <p className="text-xs text-amber-500/80 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-amber-400/10 bg-amber-500/5 rounded-full inline-block py-1">
+                  Radar Saham Konglomerat
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 relative z-10 text-left">
+                {GIANTS.map(giant => (
+                   <div key={giant.group} className="bg-slate-950/80 p-5 rounded-2xl border border-white/5 hover:border-amber-500/30 transition-all duration-300 group hover:-translate-y-1 hover:shadow-xl hover:shadow-amber-500/10 flex flex-col">
+                      <div className="flex items-center gap-3 mb-5">
+                        <h4 className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-lg border tracking-widest shadow-sm ${giant.badgeClass}`}>
+                          {giant.group}
+                        </h4>
+                        <div className="flex-1 border-t border-white/10 group-hover:border-amber-500/30 transition-colors"></div>
+                      </div>
+                      <div className="flex flex-wrap gap-2.5 flex-1 items-start content-start">
+                         {giant.stocks.map(stock => (
+                            <button 
+                              key={stock}
+                              onClick={() => handleGiantClick(stock)}
+                              title={`Pindai otomatis saham ${stock}`}
+                              className={`flex-1 min-w-[70px] px-3 py-3 rounded-xl text-[11px] font-black tracking-widest bg-slate-900 border-b-[3px] transition-all text-slate-300 hover:scale-[1.03] active:scale-[0.98] active:border-b-[1px] active:translate-y-0.5 ${giant.btnClass}`}
+                            >
+                              {stock}
+                            </button>
+                         ))}
+                      </div>
+                   </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ WATCHLIST TAB ═══════════════════════════════════════════════════════════════════════ */}
+        {tab === "watchlist" && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-700 space-y-4">
+            <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-2 pb-3 border-b border-white/5">
+              <Shield className="w-4 h-4 text-purple-500" /> Watchlist Saya
+            </h3>
+            
+            {watchlist.length === 0 ? (
+              <div className="text-center py-20 bg-slate-900/20 rounded-3xl border border-dashed border-white/10">
+                <Shield className="w-12 h-12 text-slate-800 mx-auto mb-4" />
+                <p className="text-slate-400 font-bold uppercase tracking-widest">Your Watchlist is Empty</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {watchlist.map((w) => (
+                  <div key={w.id} className="relative group">
+                    <button
+                      onClick={() => { setStockCode(w.stockCode); setResult(w.levels); setTab("main"); }}
+                      className="w-full bg-slate-900/50 p-5 rounded-2xl border border-white/5 flex items-center justify-between hover:border-green-500/30 transition-all text-left"
+                    >
+                      <div>
+                        <h4 className="font-black text-slate-100 uppercase tracking-widest flex items-center gap-2">
+                          {w.stockCode}
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20">SAVED</span>
+                        </h4>
+                        <p className="text-[10px] text-slate-300 font-medium uppercase">Stored on {w.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black text-green-400 italic">PP: {fmt(w.levels.PP)}</p>
+                        <p className="text-[10px] text-slate-300 font-medium uppercase flex items-center justify-end gap-1">
+                          Open Analysis <ChevronRight className="w-3 h-3" />
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newW = watchlist.filter(item => item.id !== w.id);
+                        setWatchlist(newW);
+                        try { localStorage.setItem("pivot_watchlist", JSON.stringify(newW)); } catch (err){}
+                      }}
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
