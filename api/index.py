@@ -57,7 +57,6 @@ async def get_stock_data(
         import urllib.request
         import json
         try:
-            tv_url = "https://scanner. tradingview.com/indonesia/scan"  # Note: minor space format safety, using direct request
             tv_url = "https://scanner.tradingview.com/indonesia/scan"
             raw_ticker = ticker.upper().replace(".JK", "")
             payload = json.dumps({
@@ -65,19 +64,28 @@ async def get_stock_data(
                 "columns": ["close", "high", "low", "open", "volume"]
             }).encode('utf-8')
             
-            req = urllib.request.Request(tv_url, data=payload, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
+            headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Origin': 'https://www.tradingview.com',
+                'Referer': 'https://www.tradingview.com/'
+            }
             
-            with urllib.request.urlopen(req, timeout=4) as response:
+            req = urllib.request.Request(tv_url, data=payload, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=6) as response:
                 r = json.loads(response.read().decode('utf-8'))
                 if r.get('data') and len(r['data']) > 0:
                     props = r['data'][0]['d']
-                    live_price = float(props[0])
-                    live_high = float(props[1])
-                    live_low = float(props[2])
-                    live_open = float(props[3])
-                    live_vol = int(props[4])
+                    if props[0] is not None:
+                        live_price = float(props[0])
+                        live_high = float(props[1])
+                        live_low = float(props[2])
+                        live_open = float(props[3])
+                        live_vol = int(props[4])
         except Exception as e:
-            print(f"TradingView fetch failed, falling back to Yahoo: {e}")
+            print(f"TradingView fetch Timeout/Blocked, falling back smoothly to Yahoo: {e}")
 
         # Fallback 1: yfinance fast_info
         if not live_price or live_price == 0:
@@ -131,10 +139,17 @@ async def get_stock_data(
             fetch_period  = "3mo"
 
         # ── Fetch enough history ─────────────────────────────────────────────
-        hist = stock.history(period=fetch_period)
+        try:
+            hist = stock.history(period=fetch_period)
+        except Exception as e:
+            print(f"Yahoo history error: {e}")
+            hist = pd.DataFrame()
 
         if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No data for {ticker}")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Koneksi bermasalah: Kedua sumber penyedia data (TradingView & Yahoo Finance) gagal merespon untuk saham {ticker}. Silakan coba lagi dalam beberapa menit."
+            )
 
         has_today = not hist.empty and hist.index[-1].date() == now.date()
 
