@@ -495,58 +495,76 @@ export default function PivotAnalyzer() {
   // --- Giants Data ----------------------------------------------------------
   const GIANTS = useMemo(() => [
     {
-      group: "HAPSORO",
-      badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-      btnClass: "border-purple-500 hover:bg-purple-500/20 hover:text-white",
-      stocks: ["RAJA", "MINA", "BUVA", "PSKT"]
+      group: "BAKRIE",
+      badgeClass: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+      btnClass: "border-orange-500 hover:bg-orange-500/20 hover:text-white",
+      stocks: ["BUMI", "BNBR", "BRMS", "DEWA", "ENRG", "UNSP", "VIVA", "MDIA", "ELTY", "BTEL", "GJLE", "VKTR"]
     },
     {
-      group: "BARITO (PRAJOGO)",
+      group: "BARITO",
       badgeClass: "bg-green-500/10 text-green-400 border-green-500/20",
       btnClass: "border-green-500 hover:bg-green-500/20 hover:text-white",
-      stocks: ["BREN", "BRPT", "TPIA", "CUAN", "PTRO"]
+      stocks: ["BREN", "BRPT", "TPIA", "CUAN", "PTRO", "BARA"]
     },
     {
       group: "SALIM",
       badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
       btnClass: "border-blue-500 hover:bg-blue-500/20 hover:text-white",
-      stocks: ["ASII", "BBCA", "INDF", "ICBP", "ADHI"]
+      stocks: ["ASII", "BBCA", "INDF", "ICBP", "LSIP", "SIMP", "DNET", "IMAS"]
     },
     {
-      group: "ADRO (BOY THOHIR)",
+      group: "DJARUM",
+      badgeClass: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+      btnClass: "border-yellow-500 hover:bg-yellow-500/20 hover:text-white",
+      stocks: ["BBCA", "TOWR", "BLIB", "BELI", "RANC"]
+    },
+    {
+      group: "ADRO",
       badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
       btnClass: "border-emerald-500 hover:bg-emerald-500/20 hover:text-white",
-      stocks: ["ADRO", "ADMR", "MBMA", "ESSA"]
+      stocks: ["ADRO", "ADMR", "MBMA", "ESSA", "PALM", "GOTO"]
     },
     {
-      group: "PANIN (MU'MIN ALI)",
-      badgeClass: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-      btnClass: "border-indigo-500 hover:bg-indigo-500/20 hover:text-white",
-      stocks: ["PNBN", "PNIN", "PNLF", "PNBS", "CFIN"]
-    },
-    {
-      group: "MNC (TANOE)",
+      group: "MNC",
       badgeClass: "bg-sky-500/10 text-sky-400 border-sky-500/20",
       btnClass: "border-sky-500 hover:bg-sky-500/20 hover:text-white",
-      stocks: ["BHIT", "MNCN", "BMTR", "KPIG", "BCAP"]
+      stocks: ["BHIT", "MNCN", "BMTR", "KPIG", "BCAP", "BABP", "IPTV", "MSIN"]
     },
     {
-      group: "SINARMAS (WIDJAJA)",
+      group: "SINARMAS",
       badgeClass: "bg-red-500/10 text-red-400 border-red-500/20",
       btnClass: "border-red-500 hover:bg-red-500/20 hover:text-white",
-      stocks: ["BSDE", "INKP", "TKIM", "SMMA", "DMAS"]
+      stocks: ["BSDE", "INKP", "TKIM", "SMMA", "DMAS", "FREN", "BSIM"]
     },
     {
-      group: "BAKRIE",
-      badgeClass: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-      btnClass: "border-orange-500 hover:bg-orange-500/20 hover:text-white",
-      stocks: ["BNBR", "BRMS", "DEWA", "ENRG", "UNSP", "VIVA"]
-    },
-    {
-      group: "LIPPO (RIADY)",
+      group: "LIPPO",
       badgeClass: "bg-rose-500/10 text-rose-400 border-rose-500/20",
       btnClass: "border-rose-500 hover:bg-rose-500/20 hover:text-white",
-      stocks: ["LPKR", "LPPF", "MLPL", "MPPA", "SILO"]
+      stocks: ["LPKR", "LPPF", "MLPL", "MPPA", "SILO", "LINK"]
+    },
+    {
+      group: "PANIN",
+      badgeClass: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+      btnClass: "border-indigo-500 hover:bg-indigo-500/20 hover:text-white",
+      stocks: ["PNBN", "PNIN", "PNLF", "PNBS", "CFIN", "PANI"]
+    },
+    {
+      group: "SARATOGA",
+      badgeClass: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+      btnClass: "border-teal-500 hover:bg-teal-500/20 hover:text-white",
+      stocks: ["SRTG", "MDKA", "MPMX", "GOLD"]
+    },
+    {
+      group: "CT CORP",
+      badgeClass: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+      btnClass: "border-violet-500 hover:bg-violet-500/20 hover:text-white",
+      stocks: ["BANK", "ALLO", "TRAN"]
+    },
+    {
+      group: "ASTRA",
+      badgeClass: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+      btnClass: "border-fuchsia-500 hover:bg-fuchsia-500/20 hover:text-white",
+      stocks: ["ASII", "UNTR", "ASGR", "AUTO", "AALI"]
     }
   ], []);
 
@@ -1243,14 +1261,14 @@ export default function PivotAnalyzer() {
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-amber-500/10 blur-[80px] pointer-events-none" />
               
               <div className="relative z-10 mb-8 max-w-sm mx-auto">
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/30 mb-4 animate-bounce hover:animate-none">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30 mb-4 animate-bounce hover:animate-none">
                   <Star className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-600 uppercase tracking-widest leading-tight">
-                  The Giants Watchlist
+                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-500 uppercase tracking-widest leading-tight">
+                  RADAR SAHAM KONGLOMERAT
                 </h2>
-                <p className="text-xs text-amber-500/80 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-amber-400/10 bg-amber-500/5 rounded-full inline-block py-1">
-                  Radar Saham Konglomerat
+                <p className="text-xs text-purple-400 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-purple-500/20 bg-purple-500/10 rounded-full inline-block py-1">
+                  Pantauan Ekosistem Pasar
                 </p>
               </div>
 
