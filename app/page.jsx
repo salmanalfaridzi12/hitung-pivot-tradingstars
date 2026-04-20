@@ -170,28 +170,31 @@ export default function PivotAnalyzer() {
   };
 
   const handleCalculate = () => {
-    let h = parseFloat(high);
-    let l = parseFloat(low);
-    const c = parseFloat(close);
-    let o = parseFloat(open);
-    const ep = parseFloat(currentPrice);
+    const hStr = String(high).trim().replace(/,/g, '');
+    const lStr = String(low).trim().replace(/,/g, '');
+    const cStr = String(close).trim().replace(/,/g, '');
+    const oStr = String(open).trim().replace(/,/g, '');
+    const epStr = String(currentPrice).trim().replace(/,/g, '');
 
-    if (isNaN(h) || isNaN(l) || isNaN(c) || h <= 0 || l <= 0 || c <= 0) {
+    if (!high || !low || !close || Number(hStr) <= 0 || Number(lStr) <= 0 || Number(cStr) <= 0) {
       alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka di atas 0.");
       return;
     }
 
-    if (isNaN(ep) || ep <= 0) {
-      alert("⚠️ HARGA ENTRY TIDAK VALID: Harga saat ini (Entry) tidak boleh 0. Silakan input harga manual.");
-      return;
-    }
+    let h = Number(hStr);
+    let l = Number(lStr);
+    const c = Number(cStr);
+    let o = Number(oStr);
+
+    // Jika Entry kosong atau 0, gunakan Close sebagai fallback (don't block)
+    const ep = Number(epStr) > 0 ? Number(epStr) : c;
 
     if (h < l) {
       alert("⚠️ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
       return;
     }
 
-    if (isNaN(o) || o === 0) o = c; // Fallback safe open price
+    if (!open || o === 0 || isNaN(o)) o = c; // Fallback safe open price
 
     setLoading(true);
     setTimeout(() => {
