@@ -262,6 +262,9 @@ export default function PivotAnalyzer() {
 
     setFetchLoading(true);
     setFetchStatus(null);
+    setResult(null); // Hapus result lama
+    setOpen(""); setHigh(""); setLow(""); setClose("");
+    setVolume(""); setMa20Volume(""); setMa20Price(""); setCurrentPrice("");
 
     try {
       const tf = timeframe.toLowerCase();
@@ -274,15 +277,8 @@ export default function PivotAnalyzer() {
         }
       });
       const data = await res.json();
-      console.log('Backend Response (handleFetchData):', data);
-
       if (!res.ok) {
-        const errorMsg = data.detail || data.error || "Fetch gagal.";
-        if (String(errorMsg).includes("Koneksi bermasalah")) {
-          setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
-        } else {
-          setFetchStatus({ type: "error", msg: errorMsg });
-        }
+        setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
         return;
       }
 
@@ -290,6 +286,9 @@ export default function PivotAnalyzer() {
         setFetchStatus({ type: "error", msg: "Data emiten sedang direkap/belum utuh. Coba sebentar lagi." });
         return;
       }
+
+      // -- Jika sudah lewat sini, data valid! Matikan semua potensi error.
+      setFetchStatus(null);
 
       // -- Populate all fields automatically (from original Python API) --
       if (data.open   != null) setOpen(String(data.open));
@@ -344,15 +343,9 @@ export default function PivotAnalyzer() {
         }
       });
       const data = await res.json();
-      console.log('Backend Response (handleGiantClick):', data);
 
       if (!res.ok) {
-        const errorMsg = data.detail || data.error || "Fetch gagal.";
-        if (String(errorMsg).includes("Koneksi bermasalah")) {
-          setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
-        } else {
-          setFetchStatus({ type: "error", msg: errorMsg });
-        }
+        setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
         setFetchLoading(false);
         return;
       }
@@ -362,6 +355,9 @@ export default function PivotAnalyzer() {
         setFetchLoading(false);
         return;
       }
+
+      // Data mutlak sukses, reset potential errors
+      setFetchStatus(null);
 
       const o = data.open != null ? String(data.open) : "";
       const h = data.high != null ? String(data.high) : "";
