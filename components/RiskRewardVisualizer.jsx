@@ -26,6 +26,13 @@ export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
   const rrRatio = (reward / risk).toFixed(2);
   const isGoodRatio = parseFloat(rrRatio) >= 2;
 
+  // Calculate percentage returns
+  const targetPct = (((t - e) / e) * 100).toFixed(2);
+  const slPct = (((sl - e) / e) * 100).toFixed(2);
+  
+  const targetPctLabel = parseFloat(targetPct) > 0 ? `+${targetPct}%` : `${targetPct}%`;
+  const slPctLabel = `${slPct}%`;
+
   // Calculate percentages for the vertical bar
   const total = risk + reward;
   const riskPct = (risk / total) * 100;
@@ -67,7 +74,10 @@ export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
             </div>
             <div>
               <p className="text-[10px] text-slate-300 font-medium">REWARD (TARGET)</p>
-              <p className="text-sm font-black text-green-400">Rp {t.toLocaleString("id-ID")}</p>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-sm font-black text-green-400">Rp {t.toLocaleString("id-ID")}</p>
+                <span className="text-[11px] font-bold text-green-500/90 tracking-tight">({targetPctLabel})</span>
+              </div>
             </div>
           </div>
 
@@ -87,7 +97,10 @@ export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
             </div>
             <div>
               <p className="text-[10px] text-slate-300 font-medium">RISK (STOP LOSS)</p>
-              <p className="text-sm font-black text-red-400">Rp {sl.toLocaleString("id-ID")}</p>
+              <div className="flex items-baseline gap-1.5">
+                 <p className="text-sm font-black text-red-400">Rp {sl.toLocaleString("id-ID")}</p>
+                 <span className="text-[11px] font-bold text-red-500/90 tracking-tight">({slPctLabel})</span>
+              </div>
             </div>
           </div>
         </div>
