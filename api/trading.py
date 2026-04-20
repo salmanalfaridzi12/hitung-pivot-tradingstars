@@ -36,14 +36,15 @@ async def get_stock_data(
     symbol: str = Query(..., description="Kode saham IDX, contoh: KAQI atau KAQI.JK"),
     timeframe: str = Query(default="daily", description="daily | weekly | monthly")
 ):
-    ticker = symbol  # alias agar kode di bawah tetap sama
+    ticker = symbol.strip().upper()  # normalize input
     try:
         tf = timeframe.lower()
 
-        if not ticker.upper().endswith(".JK"):
-            ticker_jk = f"{ticker.upper()}.JK"
+        # Force .JK suffix for all IDX stocks
+        if not ticker.endswith(".JK"):
+            ticker_jk = f"{ticker}.JK"
         else:
-            ticker_jk = ticker.upper()
+            ticker_jk = ticker
 
         cache_key = f"{ticker_jk}_{tf}"
         cached = GLOBAL_CACHE.get(cache_key)
@@ -300,10 +301,33 @@ async def get_stock_data(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Unhandled error: {e}")
+        print(f"Unhandled error for {symbol}: {e}")
+        # ── Graceful Fallback: return synthetic data if live_price was captured ──
+        try:
+            if 'live_price' in dir() and live_price > 0:
+                print(f"[GRACEFUL FALLBACK] Returning synthetic bar for {symbol}")
+                fallback_data = {
+                    "ticker":        ticker_jk if 'ticker_jk' in dir() else f"{symbol}.JK",
+                    "timeframe":     timeframe.lower(),
+                    "open":          round(live_open  if live_open  > 0 else live_price, 2),
+                    "high":          round(live_high  if live_high  > 0 else live_price, 2),
+                    "low":           round(live_low   if live_low   > 0 else live_price, 2),
+                    "close":         round(live_price, 2),
+                    "prev_close":    round(live_prev_close if live_prev_close > 0 else live_price, 2),
+                    "current_price": round(live_price, 2),
+                    "volume":        live_vol if live_vol > 0 else 0,
+                    "ma20_volume":   0,
+                    "ma20_price":    0,
+                    "note":          "synthetic_fallback"
+                }
+                return fallback_data
+        except Exception as fe:
+            print(f"Fallback also failed: {fe}")
+
+        # ── Last Resort: safe zero-value JSON so frontend never crashes ──
         raise HTTPException(
-            status_code=404, 
-            detail="Terjadi error struktural sinkronisasi. Silakan gunakan Input Manual."
+            status_code=404,
+            detail=f"Data tidak ditemukan untuk {symbol}. Silakan gunakan Input Manual."
         )
 
 # Vercel Serverless handler - WAJIB ada agar Vercel bisa menjalankan FastAPI
