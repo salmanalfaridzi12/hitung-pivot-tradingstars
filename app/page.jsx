@@ -177,12 +177,12 @@ export default function PivotAnalyzer() {
     let o = parseFloat(open);
 
     if (isNaN(h) || isNaN(l) || isNaN(c)) {
-      alert("⚠️ï¸ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
+      alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka.");
       return;
     }
 
     if (h < l) {
-      alert("⚠️ï¸ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
+      alert("⚠️ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
       return;
     }
 
@@ -681,7 +681,7 @@ export default function PivotAnalyzer() {
                             ? "✅ Setup Favorit"
                             : parseFloat(calcRRR) >= 1
                             ? "⚡ Setup Layak"
-                            : "⚠️ï¸ Risk Tinggi"}
+                            : "⚠️ Risk Tinggi"}
                         </p>
                       </div>
                     ) : (
@@ -709,8 +709,8 @@ export default function PivotAnalyzer() {
                            const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
                            const isMa20Bullish = trendContext?.isBullish;
                            let badge = null;
-                           if (isPivotBullish && !isMa20Bullish) badge = "⚠️ï¸ Tech Rebound";
-                           if (!isPivotBullish && isMa20Bullish) badge = "⚠️ï¸ Sedang Koreksi";
+                           if (isPivotBullish && !isMa20Bullish) badge = "⚠️ Tech Rebound";
+                           if (!isPivotBullish && isMa20Bullish) badge = "⚠️ Sedang Koreksi";
                            
                            return (
                              <div className="flex gap-2 items-center">
