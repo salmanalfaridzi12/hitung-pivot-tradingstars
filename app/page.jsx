@@ -265,9 +265,7 @@ export default function PivotAnalyzer() {
 
     try {
       const tf = timeframe.toLowerCase();
-      // 1. Force Real-time: attach timestamp & no-store headers
-      const timestamp = new Date().getTime();
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}&t=${timestamp}`, {
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -337,8 +335,7 @@ export default function PivotAnalyzer() {
 
     try {
       const tf = timeframe.toLowerCase();
-      const timestamp = new Date().getTime();
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}&t=${timestamp}`, {
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
