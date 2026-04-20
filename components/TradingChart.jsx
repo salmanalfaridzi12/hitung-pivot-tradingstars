@@ -3,6 +3,10 @@ import React, { useEffect, useRef } from "react";
 import { createChart, ColorType } from "lightweight-charts";
 
 export default function TradingChart({ ohlc, levels, pattern }) {
+  if (!ohlc || isNaN(parseFloat(ohlc.open)) || isNaN(parseFloat(ohlc.high)) || isNaN(parseFloat(ohlc.low)) || isNaN(parseFloat(ohlc.close))) {
+    return null;
+  }
+
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
 

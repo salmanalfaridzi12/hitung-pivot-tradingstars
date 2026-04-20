@@ -40,6 +40,30 @@ function InputField({ label, value, onChange, type = "number", color = "", place
   );
 }
 
+// ─── Error Boundary ────────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("Component Error Caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-[10px] text-red-400 font-mono">
+          Visual Component Failed: {this.state.error?.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function PivotAnalyzer() {
   // ── State: OHLC Inputs
@@ -604,8 +628,12 @@ export default function PivotAnalyzer() {
                 {/* Visual Context (charts & broker) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-6">
-                    <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
-                    <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
+                    <ErrorBoundary>
+                      <RiskRewardVisualizer entry={currentPrice || close} stopLoss={result.S1} target={result.R1} />
+                    </ErrorBoundary>
+                    <ErrorBoundary>
+                      <BrokerSummary stockCode={stockCode} currentPrice={currentPrice || close} />
+                    </ErrorBoundary>
                   </div>
                   <div className="space-y-6">
                     <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
@@ -638,7 +666,9 @@ export default function PivotAnalyzer() {
                         </div>
                       )}
                     </div>
-                    <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
+                    <ErrorBoundary>
+                      <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
+                    </ErrorBoundary>
                   </div>
                 </div>
 

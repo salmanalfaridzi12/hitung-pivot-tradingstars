@@ -9,6 +9,8 @@ function cn(...inputs) {
 }
 
 export default function BrokerSummary({ stockCode, currentPrice }) {
+  if (!stockCode || !currentPrice) return null;
+
   // Simulating brokerage data based on stockCode and currentPrice
   const data = useMemo(() => {
     if (!stockCode) return null;
