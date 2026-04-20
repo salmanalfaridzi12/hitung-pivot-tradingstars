@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
@@ -93,6 +93,7 @@ export default function PivotAnalyzer() {
   const [pattern, setPattern] = useState(null);
   const [confluence, setConfluence] = useState(null);
   const [isClient, setIsClient] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   // â”€â”€ Refs
   const analysisCardRef = useRef(null);
@@ -349,6 +350,14 @@ export default function PivotAnalyzer() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setIsGuideOpen(true)}
+            className="flex items-center gap-1.5 px-3 h-10 rounded-xl bg-purple-600/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500 hover:text-white transition-all shadow-lg shadow-purple-500/10"
+            title="Panduan Penggunaan"
+          >
+            <Info className="w-4 h-4" />
+            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline-block">Cara Pakai</span>
+          </button>
           <button
             onClick={captureImage}
             className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
@@ -935,6 +944,85 @@ export default function PivotAnalyzer() {
             >
               <Share2 className="w-3 h-3" /> Share
             </button>
+          </div>
+        </div>
+      )}
+      {/* â• â•  GUIDE MODAL â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */}
+      {isGuideOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-slate-900 border border-purple-500/20 rounded-3xl w-full max-w-md shadow-2xl shadow-purple-900/20 overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-slate-900/50">
+              <h2 className="text-lg font-black text-slate-100 uppercase tracking-tighter flex items-center gap-2">
+                <Info className="w-5 h-5 text-purple-500" />
+                Panduan Penggunaan
+              </h2>
+              <button
+                onClick={() => setIsGuideOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-all"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-slate-300">
+              <div className="space-y-2">
+                <h3 className="font-black text-purple-400 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-purple-500/20 flex items-center justify-center text-xs">1</span>
+                  Pilih Timeframe
+                </h3>
+                <ul className="space-y-1.5 ml-8">
+                  <li><strong className="text-white">DAILY:</strong> Untuk trading harian (Scalping/Day Trade).</li>
+                  <li><strong className="text-white">WEEKLY:</strong> Untuk trading mingguan (Swing Trade).</li>
+                  <li><strong className="text-white">MONTHLY:</strong> Untuk investasi jangka panjang.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-black text-purple-400 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-purple-500/20 flex items-center justify-center text-xs">2</span>
+                  Cari Saham
+                </h3>
+                <ul className="space-y-1.5 ml-8">
+                  <li>Ketik kode saham (contoh: <strong className="text-white">BMTR, ASII</strong>) di kolom pencarian.</li>
+                  <li>Tunggu data OHLC (Open, High, Low, Close) terisi <strong className="text-indigo-400">otomatis</strong>.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-black text-amber-500 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-amber-500/20 flex items-center justify-center text-xs">3</span>
+                  Hitung & Analisa
+                </h3>
+                <ul className="space-y-1.5 ml-8">
+                  <li>Klik <strong className="text-white">'HITUNG PIVOT POINT'</strong>.</li>
+                  <li>Cek <strong className="text-white">'PIVOT LADDER'</strong> untuk melihat Area Beli (Supp) dan Target Jual (Res).</li>
+                  <li>Pastikan <strong className="text-yellow-400">'RRR SETUP'</strong> bernilai di atas <strong className="text-yellow-400">1:1.5</strong> agar trading tetap sehat.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-black text-green-400 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-green-500/20 flex items-center justify-center text-xs">4</span>
+                  Cara Baca Tren
+                </h3>
+                <ul className="space-y-1.5 ml-8">
+                  <li><strong className="text-green-400">TREN NAIK (Bullish):</strong> Harga kuat di atas rata-rata.</li>
+                  <li><strong className="text-red-400">TREN TURUN (Bearish):</strong> Waspada harga sedang melemah.</li>
+                </ul>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/5 bg-slate-900/80">
+              <button
+                onClick={() => setIsGuideOpen(false)}
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-purple-900/20"
+              >
+                Mengerti
+              </button>
+            </div>
           </div>
         </div>
       )}
