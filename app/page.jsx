@@ -316,6 +316,127 @@ export default function PivotAnalyzer() {
     }
   }, [stockCode, timeframe]);
 
+  // --- Giant Watchlist Auto-Click -------------------------------------------
+  const handleGiantClick = useCallback(async (code) => {
+    setTab("main");
+    setStockCode(code);
+    setFetchLoading(true);
+    setFetchStatus(null);
+    setResult(null); // Force screen to loading state
+
+    try {
+      const tf = timeframe.toLowerCase();
+      const timestamp = new Date().getTime();
+      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}&t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFetchStatus({ type: "error", msg: data.error || "Fetch gagal." });
+        setFetchLoading(false);
+        return;
+      }
+
+      const o = data.open != null ? String(data.open) : "";
+      const h = data.high != null ? String(data.high) : "";
+      const l = data.low != null ? String(data.low) : "";
+      let c = "";
+      if (data.prev_close != null && timeframe.toLowerCase() === "daily") {
+        c = String(data.prev_close);
+      } else if (data.close != null) {
+        c = String(data.close);
+      }
+      
+      const v = data.volume != null ? String(data.volume) : "";
+      const m20v = data.ma20_volume != null ? String(data.ma20_volume) : "";
+      const m20p = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "";
+      
+      let curP = "";
+      if (data.current_price != null && data.current_price > 0) {
+        curP = String(data.current_price);
+      } else if (data.close != null) {
+        curP = String(data.close);
+      }
+
+      setOpen(o); setHigh(h); setLow(l); setClose(c);
+      setVolume(v); setMa20Volume(m20v); setMa20Price(m20p); setCurrentPrice(curP);
+
+      setFetchStatus({
+        type: "success",
+        msg: `Data ${code} [${timeframe}] berhasil diisi & dikalkulasi.`,
+      });
+
+      // INSTANT CALCULATION
+      const hNum = parseFloat(h);
+      const lNum = parseFloat(l);
+      const cNum = parseFloat(c);
+      const oNum = parseFloat(o) || cNum;
+
+      if (!isNaN(hNum) && !isNaN(lNum) && !isNaN(cNum) && hNum >= lNum) {
+         setLoading(true);
+         setTimeout(() => {
+           try {
+             const p = (hNum + lNum + cNum) / 3;
+             const levels = {
+                PP: Math.round(p),
+                R1: Math.round(2 * p - lNum),
+                S1: Math.round(2 * p - hNum),
+                R2: Math.round(p + (hNum - lNum)),
+                S2: Math.round(p - (hNum - lNum)),
+                R3: Math.round(hNum + 2 * (p - lNum)),
+                S3: Math.round(lNum - 2 * (hNum - p)),
+             };
+             setResult(levels);
+
+             const detectedPattern = identifyPattern({ open: oNum, high: hNum, low: lNum, close: cNum });
+             setPattern(detectedPattern);
+
+             const cpNum = parseFloat(curP) || cNum;
+             const nearestLvl = Object.entries(levels).reduce((prev, curr) =>
+               Math.abs(curr[1] - cpNum) < Math.abs(prev[1] - cpNum) ? curr : prev,
+               ["PP", levels.PP]
+             );
+             const conf = getConfluenceLabel(detectedPattern, { label: nearestLvl[0], value: nearestLvl[1] });
+             setConfluence(conf);
+
+             const entry = {
+               id: Date.now(),
+               stockCode: code,
+               levels,
+               date: new Date().toLocaleDateString("id-ID"),
+               time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+               ohlc: { h: hNum, l: lNum, c: cNum, o: oNum },
+             };
+             setHistory(prev => {
+                const newHistory = [entry, ...prev].slice(0, 20);
+                if (typeof window !== 'undefined') {
+                  try { localStorage.setItem("pivot_history", JSON.stringify(newHistory)); } 
+                  catch (e) {}
+                }
+                return newHistory;
+             });
+
+           } catch (err) {
+             console.error("Auto Calculate Error:", err);
+             alert(err.message || "Terjadi masalah kalkulasi.");
+           } finally {
+             setLoading(false);
+           }
+         }, 300);
+      }
+    } catch (err) {
+       setFetchStatus({ type: "error", msg: "Koneksi bermasalah. Coba lagi." });
+    } finally {
+       setFetchLoading(false);
+    }
+  }, [timeframe]);
+
   const addToWatchlist = () => {
     if (!result) return;
     const entry = { id: Date.now(), stockCode: stockCode || "IDX", levels: result, date: new Date().toLocaleDateString("id-ID") };
@@ -370,6 +491,28 @@ export default function PivotAnalyzer() {
         { l: "S3", v: result.S3, c: "text-green-500",  b: "bg-green-500/5",  bar: "bg-green-500/30" },
       ]
     : [];
+
+  // --- Giants Data ----------------------------------------------------------
+  const GIANTS = useMemo(() => [
+    {
+      group: "HAPSORO",
+      badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+      btnClass: "border-purple-500 hover:bg-purple-500/20 hover:text-white",
+      stocks: ["RAJA", "MINA", "BUVA", "PSKT"]
+    },
+    {
+      group: "BARITO & PRAJOGO",
+      badgeClass: "bg-green-500/10 text-green-400 border-green-500/20",
+      btnClass: "border-green-500 hover:bg-green-500/20 hover:text-white",
+      stocks: ["BREN", "BRPT", "TPIA", "CUAN", "PTRO"]
+    },
+    {
+      group: "SALIM",
+      badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      btnClass: "border-blue-500 hover:bg-blue-500/20 hover:text-white",
+      stocks: ["ASII", "BBCA", "INDF", "ICBP", "ADHI"]
+    }
+  ], []);
 
   // --- Render ---------------------------------------------------------------
   return (
@@ -1056,49 +1199,92 @@ export default function PivotAnalyzer() {
 
         {/* â•â• WATCHLIST TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === "watchlist" && (
-          <div className="animate-in fade-in slide-in-from-left-4 duration-700 space-y-4">
-            {watchlist.length === 0 ? (
-              <div className="text-center py-20 bg-slate-900/20 rounded-3xl border border-dashed border-white/10">
-                <Shield className="w-12 h-12 text-slate-800 mx-auto mb-4" />
-                <p className="text-slate-400 font-bold uppercase tracking-widest">Your Watchlist is Empty</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {watchlist.map((w) => (
-                  <div key={w.id} className="relative group">
-                    <button
-                      onClick={() => { setStockCode(w.stockCode); setResult(w.levels); setTab("main"); }}
-                      className="w-full bg-slate-900/50 p-5 rounded-2xl border border-white/5 flex items-center justify-between hover:border-green-500/30 transition-all text-left"
-                    >
-                      <div>
-                        <h4 className="font-black text-slate-100 uppercase tracking-widest flex items-center gap-2">
-                          {w.stockCode}
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20">SAVED</span>
-                        </h4>
-                        <p className="text-[10px] text-slate-300 font-medium uppercase">Stored on {w.date}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black text-green-400 italic">PP: {fmt(w.levels.PP)}</p>
-                        <p className="text-[10px] text-slate-300 font-medium uppercase flex items-center justify-end gap-1">
-                          Open Analysis <ChevronRight className="w-3 h-3" />
-                        </p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const newW = watchlist.filter(item => item.id !== w.id);
-                        setWatchlist(newW);
-                        localStorage.setItem("pivot_watchlist", JSON.stringify(newW));
-                      }}
-                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+          <div className="animate-in fade-in slide-in-from-left-4 duration-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              
+              {/* --- MY PERSONAL WATCHLIST --- */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-2 pb-3 border-b border-white/5">
+                  <Shield className="w-4 h-4 text-purple-500" /> Watchlist Saya
+                </h3>
+                
+                {watchlist.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-900/20 rounded-3xl border border-dashed border-white/10">
+                    <Shield className="w-10 h-10 text-slate-800 mx-auto mb-3" />
+                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Watchlist Kosong</p>
                   </div>
-                ))}
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {watchlist.map((w) => (
+                      <div key={w.id} className="relative group">
+                        <button
+                          onClick={() => { setStockCode(w.stockCode); setResult(w.levels); setTab("main"); }}
+                          className="w-full bg-slate-900/50 p-4 rounded-2xl border border-white/5 flex items-center justify-between hover:border-purple-500/30 transition-all text-left"
+                        >
+                          <div>
+                            <h4 className="font-black text-slate-100 uppercase tracking-widest flex items-center gap-2 mb-0.5">
+                              {w.stockCode}
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">TERSIMPAN</span>
+                            </h4>
+                            <p className="text-[9px] text-slate-400 font-medium uppercase">Stored: {w.date}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-white italic">PP: {fmt(w.levels.PP)}</p>
+                            <p className="text-[9px] text-purple-400 font-semibold uppercase flex items-center justify-end gap-1 mt-0.5">
+                              Analisa <ChevronRight className="w-3 h-3" />
+                            </p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newW = watchlist.filter(item => item.id !== w.id);
+                            setWatchlist(newW);
+                            try { localStorage.setItem("pivot_watchlist", JSON.stringify(newW)); } catch (err){}
+                          }}
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg z-10"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* --- THE GIANTS WATCHLIST --- */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-yellow-500 uppercase tracking-widest flex items-center gap-2 mb-2 pb-3 border-b border-white/5">
+                  <Star className="w-4 h-4 text-yellow-500" /> The Giants Watchlist
+                </h3>
+                
+                <div className="space-y-4">
+                  {GIANTS.map(giant => (
+                     <div key={giant.group} className="bg-slate-900/40 p-4 rounded-3xl border border-white/5 hover:border-white/10 transition-colors">
+                        <div className="flex items-center gap-2 mb-4">
+                          <h4 className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-md border tracking-widest ${giant.badgeClass}`}>
+                            {giant.group}
+                          </h4>
+                          <div className="flex-1 border-t border-white/5"></div>
+                        </div>
+                        <div className="flex flex-wrap gap-2.5">
+                           {giant.stocks.map(stock => (
+                              <button 
+                                key={stock}
+                                onClick={() => handleGiantClick(stock)}
+                                title={`Pindai ${stock} secara instan`}
+                                className={`px-4 py-2.5 rounded-xl text-[11px] font-black tracking-widest bg-slate-950 border-b-[3px] transition-all text-slate-300 hover:-translate-y-0.5 active:translate-y-0 active:border-b-[1px] ${giant.btnClass}`}
+                              >
+                                {stock}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
       </div>
