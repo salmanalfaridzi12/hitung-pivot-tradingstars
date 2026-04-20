@@ -115,16 +115,9 @@ export default function PivotAnalyzer() {
   }, []);
 
   // -- Debounced Auto-Fill: fires 800ms after user stops typing a valid code
-  useEffect(() => {
-    const code = stockCode.trim();
-    // Only trigger if 2-6 chars (typical IDX stock codes are 4 chars)
-    if (code.length < 2 || code.length > 6) return;
-    const timer = setTimeout(() => {
-      handleAutoFill();
-    }, 800);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockCode]);
+  // NOTE: We intentionally do NOT re-fetch on stockCode changes to prevent
+  // the button-click onBlur race condition that cleared OHLC data mid-session.
+  // Auto-fill is only triggered by explicit user actions (Search button / Enter).
 
   // --- Derived: Trend Context (Current Price vs MA20 Price) -----------------
   const trendContext = useMemo(() => {
@@ -176,6 +169,12 @@ export default function PivotAnalyzer() {
     const c = parseFloat(String(close).trim().replace(/[,\s]/g, ''));
     let o  = parseFloat(String(open).trim().replace(/[,\s]/g, ''));
     const ep = parseFloat(String(currentPrice).trim().replace(/[,\s]/g, ''));
+
+    // Guard: Jika semua field kosong, data hilang dari state (bukan panggil API lagi)
+    if (!high && !low && !close) {
+      setFetchStatus({ type: "error", msg: "⚠️ Data hilang, silakan search ulang terlebih dahulu." });
+      return;
+    }
 
     // Non-blocking validation — tunjukkan toast, tidak pakai alert()
     if (isNaN(h) || isNaN(l) || isNaN(c)) {
@@ -745,7 +744,6 @@ export default function PivotAnalyzer() {
                         setFetchStatus(null);
                       }}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAutoFill(); }}
-                      onBlur={() => { if (stockCode.trim().length >= 2) handleAutoFill(); }}
                       placeholder="Ketik kode saham, data terisi otomatis..."
                       className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-5 pr-24 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
                     />
