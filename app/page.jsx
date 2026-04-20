@@ -279,10 +279,13 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
+      const fetchUrl = `/py/stock/${encodeURIComponent(code)}?timeframe=${tf}`;
+      console.log('Fetching from:', fetchUrl);
+      const res = await fetch(fetchUrl, {
         cache: 'no-store',
         signal: controller.signal,
         headers: {
+          'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
@@ -355,10 +358,13 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const res = await fetch(`/api/stock/${encodeURIComponent(code)}?timeframe=${tf}`, {
+      const fetchUrl = `/py/stock/${encodeURIComponent(code)}?timeframe=${tf}`;
+      console.log('Fetching from:', fetchUrl);
+      const res = await fetch(fetchUrl, {
         cache: 'no-store',
         signal: controller.signal,
         headers: {
+          'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'

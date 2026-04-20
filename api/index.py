@@ -30,7 +30,7 @@ def aggregate_ohlcv(df: pd.DataFrame) -> dict:
         "volume": int(df["Volume"].sum()),
     }
 
-@app.get("/api/stock/{ticker}")
+@app.get("/py/stock/{ticker}")
 async def get_stock_data(
     ticker: str,
     timeframe: str = Query(default="daily", description="daily | weekly | monthly")
