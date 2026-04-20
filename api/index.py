@@ -127,21 +127,15 @@ async def get_stock_data(
                 hist = pd.concat([hist, new_row])
                 has_today = True
 
-        # ── Define Completed History Pivot Base ──────────────────────────────
-        # If market is strictly open (before 16:00 local time), today's candle is NOT complete.
-        # Pivot calculation requires completed period to project the next session.
-        is_market_running = has_today and now.hour < 16
-        
-        completed_hist = hist.iloc[:-1] if is_market_running else hist
-
-        if len(completed_hist) < bars_needed:
+        if len(hist) < bars_needed:
             raise HTTPException(
                 status_code=404,
-                detail=f"Not enough completed history for {tf} aggregation ({len(completed_hist)} bars, need {bars_needed})"
+                detail=f"Not enough history for {tf} aggregation ({len(hist)} bars, need {bars_needed})"
             )
 
-        # ── Build COMPLETED period OHLCV (T-1 Pivot Reference) ───────────────
-        period_bars = completed_hist.tail(bars_needed)
+        # ── Build ACTIVE period OHLCV (Bypass T-1, Use Live Data) ────────────
+        # User requested aggressive live volatility tracking, bypassing completed limits
+        period_bars = hist.tail(bars_needed)
         ohlcv = aggregate_ohlcv(period_bars)
 
         if not ohlcv or ohlcv["close"] == 0:
