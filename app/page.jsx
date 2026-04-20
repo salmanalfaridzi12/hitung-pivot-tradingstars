@@ -170,31 +170,33 @@ export default function PivotAnalyzer() {
   };
 
   const handleCalculate = () => {
-    const hStr = String(high).trim().replace(/,/g, '');
-    const lStr = String(low).trim().replace(/,/g, '');
-    const cStr = String(close).trim().replace(/,/g, '');
-    const oStr = String(open).trim().replace(/,/g, '');
-    const epStr = String(currentPrice).trim().replace(/,/g, '');
+    // Parse fresh — strip formatting characters, then convert
+    const h = parseFloat(String(high).trim().replace(/[,\s]/g, ''));
+    const l = parseFloat(String(low).trim().replace(/[,\s]/g, ''));
+    const c = parseFloat(String(close).trim().replace(/[,\s]/g, ''));
+    let o  = parseFloat(String(open).trim().replace(/[,\s]/g, ''));
+    const ep = parseFloat(String(currentPrice).trim().replace(/[,\s]/g, ''));
 
-    if (!high || !low || !close || Number(hStr) <= 0 || Number(lStr) <= 0 || Number(cStr) <= 0) {
-      alert("⚠️ DATA TIDAK VALID: Pastikan input High, Low, dan Close terisi angka di atas 0.");
+    // Non-blocking validation — tunjukkan toast, tidak pakai alert()
+    if (isNaN(h) || isNaN(l) || isNaN(c)) {
+      setFetchStatus({ type: "error", msg: "⚠️ Isi kolom High, Low, dan Close dengan angka terlebih dahulu." });
       return;
     }
 
-    let h = Number(hStr);
-    let l = Number(lStr);
-    const c = Number(cStr);
-    let o = Number(oStr);
-
-    // Jika Entry kosong atau 0, gunakan Close sebagai fallback (don't block)
-    const ep = Number(epStr) > 0 ? Number(epStr) : c;
+    if (h <= 0 || l <= 0 || c <= 0) {
+      setFetchStatus({ type: "error", msg: "⚠️ High, Low, Close tidak boleh 0. Gunakan data nyata atau input manual." });
+      return;
+    }
 
     if (h < l) {
-      alert("⚠️ DATA TIDAK MASUK AKAL: High tidak boleh lebih kecil dari Low. Proses dibatalkan.");
+      setFetchStatus({ type: "error", msg: "⚠️ High tidak boleh lebih kecil dari Low. Cek kembali data OHLC." });
       return;
     }
 
-    if (!open || o === 0 || isNaN(o)) o = c; // Fallback safe open price
+    // Fallback: jika Open atau Entry kosong, pakai Close
+    if (isNaN(o) || o <= 0) o = c;
+    const entryPrice = (!isNaN(ep) && ep > 0) ? ep : c;
+
 
     setLoading(true);
     setTimeout(() => {
