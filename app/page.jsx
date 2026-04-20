@@ -281,7 +281,7 @@ export default function PivotAnalyzer() {
       if (!res.ok) {
         const errorMsg = data.detail || data.error || "Fetch gagal.";
         if (String(errorMsg).includes("Koneksi bermasalah")) {
-          setFetchStatus({ type: "error", msg: "Data dari bursa sedang delay/diproses. Silakan coba lagi." });
+          setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
         } else {
           setFetchStatus({ type: "error", msg: errorMsg });
         }
@@ -352,7 +352,7 @@ export default function PivotAnalyzer() {
       if (!res.ok) {
         const errorMsg = data.detail || data.error || "Fetch gagal.";
         if (String(errorMsg).includes("Koneksi bermasalah")) {
-          setFetchStatus({ type: "error", msg: "Data dari bursa sedang delay/diproses. Silakan coba lagi." });
+          setFetchStatus({ type: "error", msg: "Data bursa sedang padat, sistem beralih ke jalur cadangan..." });
         } else {
           setFetchStatus({ type: "error", msg: errorMsg });
         }

@@ -4,8 +4,11 @@ import yfinance as yf
 import pandas as pd
 import datetime
 import pytz
+import time
 
 app = FastAPI()
+GLOBAL_CACHE = {}
+CACHE_TTL = 300  # 5 minutes
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +42,12 @@ async def get_stock_data(
             ticker_jk = f"{ticker.upper()}.JK"
         else:
             ticker_jk = ticker.upper()
+
+        cache_key = f"{ticker_jk}_{tf}"
+        cached = GLOBAL_CACHE.get(cache_key)
+        if cached and time.time() - cached['time'] < CACHE_TTL:
+            print(f"[CACHE HIT] Memuat dari cache internal: {cache_key}")
+            return cached['data']
 
         stock = yf.Ticker(ticker_jk)
 
@@ -172,6 +181,13 @@ async def get_stock_data(
             print(f"Yahoo history error: {e}")
             hist = pd.DataFrame()
 
+        # 🔥 Synthetic Fallback for Empty History (If TradingView Has The Data!)
+        if hist.empty and live_price > 0:
+            print(f"[SYNTHETIC FIX] {ticker_jk} tidak ada history di Yahoo, generating virtual bar dari TradingView.")
+            hist = pd.DataFrame([{
+               'Open': live_open, 'High': live_high, 'Low': live_low, 'Close': live_price, 'Volume': live_vol
+            }], index=[pd.Timestamp(now)])
+
         if hist.empty:
             raise HTTPException(
                 status_code=404, 
@@ -244,7 +260,7 @@ async def get_stock_data(
         # Current true running price for real-time Signal checking
         current_price_val = live_price if live_price > 0 else (hist.iloc[-1]["Close"] if has_today else ohlcv["close"])
 
-        return {
+        result_data = {
             "ticker":      ticker_jk,
             "timeframe":   tf,
             "open":        round(ohlcv["open"],  2),
@@ -257,6 +273,9 @@ async def get_stock_data(
             "ma20_volume": ma20_volume,
             "ma20_price":  round(ma20_price) if ma20_price > 0 else 0,
         }
+
+        GLOBAL_CACHE[cache_key] = {'data': result_data, 'time': time.time()}
+        return result_data
 
     except HTTPException:
         raise
