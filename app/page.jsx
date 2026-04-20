@@ -572,7 +572,7 @@ export default function PivotAnalyzer() {
                       ? "bg-green-500/8 border-green-500/25 shadow-[0_0_20px_rgba(34,197,94,0.06)]"
                       : "bg-red-500/8 border-red-500/25 shadow-[0_0_20px_rgba(239,68,68,0.06)]"
                   }`}>
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Trend Context</p>
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Major Trend (MA20)</p>
                     <div className="flex items-start gap-2">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
                         trendContext?.isBullish ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
@@ -633,23 +633,59 @@ export default function PivotAnalyzer() {
                   
                   <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
                     <div className="flex justify-between items-center mb-4">
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Arah Trend</p>
-                        {confluence && (
-                          <div className="px-2 py-1 rounded bg-green-500/10 border border-green-500/30 text-[9px] font-black text-green-400 uppercase animate-pulse">
-                            {confluence.text}
-                          </div>
-                        )}
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Daily Sentiment (Pivot)</p>
+                        {(() => {
+                           const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
+                           const isMa20Bullish = trendContext?.isBullish;
+                           let badge = null;
+                           if (isPivotBullish && !isMa20Bullish) badge = "⚠️ Tech Rebound";
+                           if (!isPivotBullish && isMa20Bullish) badge = "⚠️ Sedang Koreksi";
+                           
+                           return (
+                             <div className="flex gap-2 items-center">
+                               {badge && (
+                                 <div className="px-2 py-1 rounded bg-orange-500/10 border border-orange-500/30 text-[9px] font-black text-orange-400 uppercase">
+                                   {badge}
+                                 </div>
+                               )}
+                               {confluence && (
+                                 <div className="px-2 py-1 rounded bg-green-500/10 border border-green-500/30 text-[9px] font-black text-green-400 uppercase animate-pulse">
+                                   {confluence.text}
+                                 </div>
+                               )}
+                             </div>
+                           );
+                        })()}
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${parseFloat(currentPrice || close) > result.PP ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                          {parseFloat(currentPrice || close) > result.PP ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                        </div>
-                        <div>
-                          <p className="text-lg font-black">{parseFloat(currentPrice || close) > result.PP ? "UPTREND" : "DOWNTREND"}</p>
-                          <p className="text-[10px] text-slate-300 font-medium uppercase">
-                            Price {parseFloat(currentPrice || close) > result.PP ? "above" : "below"} Pivot Point
-                          </p>
-                        </div>
+                        {(() => {
+                          const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
+                          const isMa20Bullish = trendContext?.isBullish;
+                          let theme = isPivotBullish ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400";
+                          let text = isPivotBullish ? "UPTREND" : "DOWNTREND";
+                          
+                          if (isPivotBullish && !isMa20Bullish) {
+                             theme = "bg-yellow-500/20 text-yellow-500";
+                             text = "REBOUND";
+                          } else if (!isPivotBullish && isMa20Bullish) {
+                             theme = "bg-orange-500/20 text-orange-400";
+                             text = "KOREKSI";
+                          }
+
+                          return (
+                            <>
+                              <div className={`p-2 rounded-lg ${theme}`}>
+                                {isPivotBullish ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                              </div>
+                              <div>
+                                <p className="text-lg font-black">{text}</p>
+                                <p className="text-[10px] text-slate-300 font-medium uppercase">
+                                  Price {isPivotBullish ? "above" : "below"} Pivot Point
+                                </p>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                       {pattern && (
                         <div className="mt-4 p-3 bg-slate-900 rounded-xl border border-white/5 flex items-start gap-3">
