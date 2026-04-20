@@ -511,6 +511,36 @@ export default function PivotAnalyzer() {
       badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20",
       btnClass: "border-blue-500 hover:bg-blue-500/20 hover:text-white",
       stocks: ["ASII", "BBCA", "INDF", "ICBP", "ADHI"]
+    },
+    {
+      group: "MNC",
+      badgeClass: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+      btnClass: "border-sky-500 hover:bg-sky-500/20 hover:text-white",
+      stocks: ["BHIT", "KPIG", "MNCN", "BMTR"]
+    },
+    {
+      group: "LIPPO",
+      badgeClass: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+      btnClass: "border-rose-500 hover:bg-rose-500/20 hover:text-white",
+      stocks: ["LPKR", "LPPF", "SILO", "MPPA"]
+    },
+    {
+      group: "SINARMAS",
+      badgeClass: "bg-red-500/10 text-red-400 border-red-500/20",
+      btnClass: "border-red-500 hover:bg-red-500/20 hover:text-white",
+      stocks: ["BSDE", "INKP", "TKIM", "SMMA"]
+    },
+    {
+      group: "BAKRIE",
+      badgeClass: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+      btnClass: "border-orange-500 hover:bg-orange-500/20 hover:text-white",
+      stocks: ["UNSP", "BNBR", "BRMS", "DEWA"]
+    },
+    {
+      group: "PANIN",
+      badgeClass: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+      btnClass: "border-indigo-500 hover:bg-indigo-500/20 hover:text-white",
+      stocks: ["PNBN", "PNIN", "PNLF", "PNBS"]
     }
   ], []);
 
@@ -587,25 +617,21 @@ export default function PivotAnalyzer() {
         <nav className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 backdrop-blur-md">
           {[
             { id: "main",      label: "Analysis", icon: Zap     },
-            { id: "giants",    label: "Giants",   icon: Star, isPremium: true },
+            { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: Star },
             { id: "watchlist", label: "Watchlist", icon: Shield  },
             { id: "history",   label: "History",   icon: History },
           ].map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all ${
                 tab === t.id
-                  ? t.isPremium 
-                      ? "bg-gradient-to-r from-yellow-600 to-amber-500 text-slate-900 shadow-lg shadow-amber-500/40" 
-                      : "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                  : t.isPremium
-                      ? "text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
-                      : "text-slate-500 hover:text-slate-300"
+                  ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                  : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              <t.icon className={`w-3.5 h-3.5 flex-shrink-0 ${t.isPremium && tab !== t.id ? 'animate-pulse text-amber-500' : ''}`} />
-              <span className="tracking-tight">{t.label}</span>
+              <t.icon className={`w-3.5 h-3.5 flex-shrink-0`} />
+              <span className="tracking-tight hidden xs:inline-block sm:inline-block">{t.label}</span>
             </button>
           ))}
         </nav>
