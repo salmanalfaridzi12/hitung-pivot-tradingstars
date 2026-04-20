@@ -30,7 +30,7 @@ def aggregate_ohlcv(df: pd.DataFrame) -> dict:
         "volume": int(df["Volume"].sum()),
     }
 
-@app.get("/api")
+@app.get("/api/trading")
 async def get_stock_data(
     symbol: str = Query(..., description="Kode saham IDX, contoh: KAQI atau KAQI.JK"),
     timeframe: str = Query(default="daily", description="daily | weekly | monthly")
