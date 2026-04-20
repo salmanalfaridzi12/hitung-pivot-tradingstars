@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Target, Shield, AlertCircle,
   Share2, Save, Bell, LineChart, Table, History, Image as ImageIcon,
   ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar,
-  Loader2, CheckCircle2, XCircle, WifiOff
+  Loader2, CheckCircle2, XCircle, WifiOff, Star
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
@@ -307,11 +307,30 @@ export default function PivotAnalyzer() {
 
   const captureImage = async () => {
     if (analysisCardRef.current) {
-      const dataUrl = await toPng(analysisCardRef.current);
-      const link = document.createElement("a");
-      link.download = `tradingstars-${stockCode || "analysis"}.png`;
-      link.href = dataUrl;
-      link.click();
+      try {
+        const dataUrl = await toPng(analysisCardRef.current, { quality: 1, pixelRatio: 2, backgroundColor: '#09090b', style: { padding: '20px' } });
+        if (navigator.share) {
+          try {
+            const blob = await (await fetch(dataUrl)).blob();
+            const file = new File([blob], `TradingStars_${stockCode || 'Analysis'}.png`, { type: blob.type });
+            await navigator.share({
+              title: `Trading Stars PRO - ${stockCode}`,
+              text: `Analisa Pivot Point & RRR Saham ${stockCode} dari Trading Stars PRO.`,
+              files: [file],
+            });
+            return;
+          } catch (e) {
+            console.log("Share canceled", e);
+          }
+        }
+        const link = document.createElement("a");
+        link.download = `tradingstars-${stockCode || "analysis"}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error("Error capturing image:", err);
+        alert("Gagal menyimpan gambar analisa.");
+      }
     }
   };
 
@@ -452,19 +471,32 @@ export default function PivotAnalyzer() {
                       onKeyDown={(e) => { if (e.key === "Enter") handleAutoFill(); }}
                       onBlur={() => { if (stockCode.trim().length >= 2) handleAutoFill(); }}
                       placeholder="Ketik kode saham, data terisi otomatis..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-5 pr-14 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
+                      className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-5 pr-24 py-4 text-sm font-black tracking-widest text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all uppercase"
                     />
-                    {/* Clickable Search / Loading Button */}
-                    <button
-                      onClick={handleAutoFill}
-                      disabled={fetchLoading || !stockCode.trim()}
-                      title="Auto-Fill OHLC dari IDX"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all shadow-lg shadow-purple-500/20"
-                    >
-                      {fetchLoading
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Search className="w-4 h-4" />}
-                    </button>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                      <button
+                        onClick={addToWatchlist}
+                        disabled={!stockCode.trim()}
+                        title="Tambah ke Watchlist"
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                          watchlist.some(w => w.stockCode === stockCode)
+                            ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                            : "bg-slate-800 border border-white/5 text-slate-400 hover:bg-slate-700 hover:text-white"
+                        }`}
+                      >
+                        <Star className={`w-4 h-4 ${watchlist.some(w => w.stockCode === stockCode) ? "fill-amber-500" : ""}`} />
+                      </button>
+                      <button
+                        onClick={handleAutoFill}
+                        disabled={fetchLoading || !stockCode.trim()}
+                        title="Auto-Fill OHLC dari IDX"
+                        className="w-8 h-8 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all shadow-lg shadow-purple-500/20"
+                      >
+                        {fetchLoading
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Search className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Fetch Status Toast */}
@@ -831,7 +863,29 @@ export default function PivotAnalyzer() {
                     )}
                   </div>
                 </div>
+
+                {/* WATERMARK TRADING STARS PRO */}
+                <div className="pt-6 pb-2 border-t border-white/5 flex flex-col items-center justify-center space-y-1.5 opacity-90">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 p-[1px] shadow-lg shadow-purple-500/20">
+                    <div className="w-full h-full bg-[#09090b] rounded-[7px] flex items-center justify-center">
+                      <span className="text-xs font-black text-purple-400">TS</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-black tracking-widest uppercase text-slate-300">Trading Stars <span className="text-purple-500 italic">PRO</span></p>
+                  <p className="text-[8.5px] font-bold text-slate-500 uppercase tracking-widest">Pivot & Momentum Analytics</p>
+                </div>
               </div>
+            )}
+
+            {/* SHARE BUTTON OUTSIDE CAPTURE AREA */}
+            {result && isClient && (
+              <button
+                onClick={captureImage}
+                className="w-full bg-slate-900 border border-purple-500/30 hover:bg-purple-500/10 hover:border-purple-500/50 text-white rounded-2xl py-4 flex items-center justify-center gap-2 font-black text-sm uppercase tracking-[0.15em] transition-all group shadow-xl shadow-purple-900/10 active:scale-[0.98]"
+              >
+                <ImageIcon className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                Share ke Grup
+              </button>
             )}
           </div>
         )}
