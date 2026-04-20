@@ -871,7 +871,25 @@ export default function PivotAnalyzer() {
                           </div>
                           <div className="text-right">
                             <p className={`text-sm font-black transition-all group-hover:scale-110 ${row.c}`}>{fmt(row.v)}</p>
-                            <p className="text-[9px] text-slate-400 font-medium uppercase">Price Point</p>
+                            {(() => {
+                              const cp = parseFloat(currentPrice) || parseFloat(close);
+                              if (!cp || isNaN(cp)) {
+                                return <p className="text-[9px] text-slate-400 font-medium uppercase mt-0.5">Price Point</p>;
+                              }
+                              const diffPct = ((row.v - cp) / cp) * 100;
+                              const isPos = diffPct > 0;
+                              const isZero = Math.abs(diffPct) < 0.01;
+                              const color = isPos ? "text-green-400" : isZero ? "text-slate-400" : "text-orange-400";
+                              const sign = isPos ? "+" : "";
+                              return (
+                                <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                                  <p className="text-[9px] text-slate-400 font-medium uppercase">Price Point</p>
+                                  <span className={`text-[9px] font-black tracking-tighter bg-slate-900/50 px-1 py-0.5 rounded border border-white/5 ${color}`}>
+                                    {isZero ? "0.00%" : `${sign}${diffPct.toFixed(2)}%`}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
 
