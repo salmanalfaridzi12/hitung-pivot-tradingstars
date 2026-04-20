@@ -281,7 +281,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
+      const fetchUrl = `/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
@@ -360,7 +360,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
+      const fetchUrl = `/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
