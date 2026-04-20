@@ -30,11 +30,12 @@ def aggregate_ohlcv(df: pd.DataFrame) -> dict:
         "volume": int(df["Volume"].sum()),
     }
 
-@app.get("/py/stock/{ticker}")
+@app.get("/api")
 async def get_stock_data(
-    ticker: str,
+    symbol: str = Query(..., description="Kode saham IDX, contoh: KAQI atau KAQI.JK"),
     timeframe: str = Query(default="daily", description="daily | weekly | monthly")
 ):
+    ticker = symbol  # alias agar kode di bawah tetap sama
     try:
         tf = timeframe.lower()
 
