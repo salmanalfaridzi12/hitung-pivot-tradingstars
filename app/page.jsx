@@ -501,7 +501,7 @@ export default function PivotAnalyzer() {
       stocks: ["RAJA", "MINA", "BUVA", "PSKT"]
     },
     {
-      group: "BARITO & PRAJOGO",
+      group: "BARITO (PRAJOGO)",
       badgeClass: "bg-green-500/10 text-green-400 border-green-500/20",
       btnClass: "border-green-500 hover:bg-green-500/20 hover:text-white",
       stocks: ["BREN", "BRPT", "TPIA", "CUAN", "PTRO"]
@@ -513,34 +513,40 @@ export default function PivotAnalyzer() {
       stocks: ["ASII", "BBCA", "INDF", "ICBP", "ADHI"]
     },
     {
-      group: "MNC",
+      group: "ADRO (BOY THOHIR)",
+      badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+      btnClass: "border-emerald-500 hover:bg-emerald-500/20 hover:text-white",
+      stocks: ["ADRO", "ADMR", "MBMA", "ESSA"]
+    },
+    {
+      group: "PANIN (MU'MIN ALI)",
+      badgeClass: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+      btnClass: "border-indigo-500 hover:bg-indigo-500/20 hover:text-white",
+      stocks: ["PNBN", "PNIN", "PNLF", "PNBS", "CFIN"]
+    },
+    {
+      group: "MNC (TANOE)",
       badgeClass: "bg-sky-500/10 text-sky-400 border-sky-500/20",
       btnClass: "border-sky-500 hover:bg-sky-500/20 hover:text-white",
-      stocks: ["BHIT", "KPIG", "MNCN", "BMTR"]
+      stocks: ["BHIT", "MNCN", "BMTR", "KPIG", "BCAP"]
     },
     {
-      group: "LIPPO",
-      badgeClass: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-      btnClass: "border-rose-500 hover:bg-rose-500/20 hover:text-white",
-      stocks: ["LPKR", "LPPF", "SILO", "MPPA"]
-    },
-    {
-      group: "SINARMAS",
+      group: "SINARMAS (WIDJAJA)",
       badgeClass: "bg-red-500/10 text-red-400 border-red-500/20",
       btnClass: "border-red-500 hover:bg-red-500/20 hover:text-white",
-      stocks: ["BSDE", "INKP", "TKIM", "SMMA"]
+      stocks: ["BSDE", "INKP", "TKIM", "SMMA", "DMAS"]
     },
     {
       group: "BAKRIE",
       badgeClass: "bg-orange-500/10 text-orange-400 border-orange-500/20",
       btnClass: "border-orange-500 hover:bg-orange-500/20 hover:text-white",
-      stocks: ["UNSP", "BNBR", "BRMS", "DEWA"]
+      stocks: ["BNBR", "BRMS", "DEWA", "ENRG", "UNSP", "VIVA"]
     },
     {
-      group: "PANIN",
-      badgeClass: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-      btnClass: "border-indigo-500 hover:bg-indigo-500/20 hover:text-white",
-      stocks: ["PNBN", "PNIN", "PNLF", "PNBS"]
+      group: "LIPPO (RIADY)",
+      badgeClass: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+      btnClass: "border-rose-500 hover:bg-rose-500/20 hover:text-white",
+      stocks: ["LPKR", "LPPF", "MLPL", "MPPA", "SILO"]
     }
   ], []);
 
@@ -624,10 +630,12 @@ export default function PivotAnalyzer() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all duration-300 ${
                 tab === t.id
-                  ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? t.id === 'giants'
+                      ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.5)]"
+                      : "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                  : "bg-slate-900/50 text-slate-400 border-transparent hover:text-purple-300"
               }`}
             >
               <t.icon className={`w-3.5 h-3.5 flex-shrink-0`} />
