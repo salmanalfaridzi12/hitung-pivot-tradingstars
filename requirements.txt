@@ -1,4 +1,6 @@
 fastapi
+mangum
 uvicorn
 yfinance
 pandas
+pytz

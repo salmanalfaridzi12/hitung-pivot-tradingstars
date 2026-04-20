@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
 import yfinance as yf
 import pandas as pd
 import datetime
@@ -304,3 +305,6 @@ async def get_stock_data(
             status_code=404, 
             detail="Terjadi error struktural sinkronisasi. Silakan gunakan Input Manual."
         )
+
+# Vercel Serverless handler - WAJIB ada agar Vercel bisa menjalankan FastAPI
+handler = Mangum(app, lifespan="off")
