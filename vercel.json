@@ -1,8 +1,9 @@
 {
-  "functions": {
-    "api/trading.py": {
-      "runtime": "@vercel/python",
-      "maxDuration": 60
-    }
-  }
+  "builds": [
+    { "src": "package.json", "use": "@vercel/next" },
+    { "src": "api/trading.py", "use": "@vercel/python" }
+  ],
+  "rewrites": [
+    { "source": "/api/trading", "destination": "/api/trading.py" }
+  ]
 }
