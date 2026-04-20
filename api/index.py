@@ -45,7 +45,7 @@ async def get_stock_data(
         tz = pytz.timezone("Asia/Jakarta")
         now = datetime.datetime.now(tz)
 
-        # ── 1 & 3 & 4. Force Real-time & Provider Check & Validation ────────
+        # ── 1. Fetch Real-time Source (TradingView Scanner for zero-delay) ──
         live_price = 0.0
         live_high = 0.0
         live_low = 0.0
@@ -53,17 +53,46 @@ async def get_stock_data(
         live_prev_close = 0.0
         live_vol = 0
 
+        # Primary Fast Source: TradingView (Bypasses Yahoo's 15-minute IDX delay)
+        import urllib.request
+        import json
         try:
-            if hasattr(stock, 'fast_info'):
-                live_price = float(getattr(stock.fast_info, 'last_price', 0.0) or stock.fast_info.get('lastPrice', 0.0))
-                live_high = float(getattr(stock.fast_info, 'day_high', 0.0) or stock.fast_info.get('dayHigh', 0.0))
-                live_low = float(getattr(stock.fast_info, 'day_low', 0.0) or stock.fast_info.get('dayLow', 0.0))
-                live_open = float(getattr(stock.fast_info, 'open', 0.0) or stock.fast_info.get('open', 0.0))
-                live_prev_close = float(getattr(stock.fast_info, 'previous_close', 0.0) or stock.fast_info.get('previousClose', 0.0))
-                live_vol = int(getattr(stock.fast_info, 'last_volume', 0) or stock.fast_info.get('lastVolume', 0))
-        except Exception:
-            pass
+            tv_url = "https://scanner. tradingview.com/indonesia/scan"  # Note: minor space format safety, using direct request
+            tv_url = "https://scanner.tradingview.com/indonesia/scan"
+            raw_ticker = ticker.upper().replace(".JK", "")
+            payload = json.dumps({
+                "symbols": {"tickers": [f"IDX:{raw_ticker}"]},
+                "columns": ["close", "high", "low", "open", "volume"]
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(tv_url, data=payload, headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'})
+            
+            with urllib.request.urlopen(req, timeout=4) as response:
+                r = json.loads(response.read().decode('utf-8'))
+                if r.get('data') and len(r['data']) > 0:
+                    props = r['data'][0]['d']
+                    live_price = float(props[0])
+                    live_high = float(props[1])
+                    live_low = float(props[2])
+                    live_open = float(props[3])
+                    live_vol = int(props[4])
+        except Exception as e:
+            print(f"TradingView fetch failed, falling back to Yahoo: {e}")
 
+        # Fallback 1: yfinance fast_info
+        if not live_price or live_price == 0:
+            try:
+                if hasattr(stock, 'fast_info'):
+                    live_price = float(getattr(stock.fast_info, 'last_price', 0.0) or stock.fast_info.get('lastPrice', 0.0))
+                    live_high = float(getattr(stock.fast_info, 'day_high', 0.0) or stock.fast_info.get('dayHigh', 0.0))
+                    live_low = float(getattr(stock.fast_info, 'day_low', 0.0) or stock.fast_info.get('dayLow', 0.0))
+                    live_open = float(getattr(stock.fast_info, 'open', 0.0) or stock.fast_info.get('open', 0.0))
+                    live_prev_close = float(getattr(stock.fast_info, 'previous_close', 0.0) or stock.fast_info.get('previousClose', 0.0))
+                    live_vol = int(getattr(stock.fast_info, 'last_volume', 0) or stock.fast_info.get('lastVolume', 0))
+            except Exception:
+                pass
+
+        # Fallback 2: Yahoo Info
         if not live_price or live_price == 0:
             try:
                 info = stock.info
