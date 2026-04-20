@@ -56,36 +56,63 @@ async def get_stock_data(
         # Primary Fast Source: TradingView (Bypasses Yahoo's 15-minute IDX delay)
         import urllib.request
         import json
-        try:
-            tv_url = "https://scanner.tradingview.com/indonesia/scan"
-            raw_ticker = ticker.upper().replace(".JK", "")
-            payload = json.dumps({
-                "symbols": {"tickers": [f"IDX:{raw_ticker}"]},
-                "columns": ["close", "high", "low", "open", "volume"]
-            }).encode('utf-8')
-            
-            headers = {
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Origin': 'https://www.tradingview.com',
-                'Referer': 'https://www.tradingview.com/'
-            }
-            
-            req = urllib.request.Request(tv_url, data=payload, headers=headers)
-            
-            with urllib.request.urlopen(req, timeout=6) as response:
-                r = json.loads(response.read().decode('utf-8'))
-                if r.get('data') and len(r['data']) > 0:
-                    props = r['data'][0]['d']
-                    if props[0] is not None:
-                        live_price = float(props[0])
-                        live_high = float(props[1])
-                        live_low = float(props[2])
-                        live_open = float(props[3])
-                        live_vol = int(props[4])
-        except Exception as e:
-            print(f"TradingView fetch Timeout/Blocked, falling back smoothly to Yahoo: {e}")
+        import random
+        import time
+
+        tv_success = False
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+        ]
+
+        raw_ticker = ticker.upper().replace(".JK", "")
+        payload = json.dumps({
+            "symbols": {"tickers": [f"IDX:{raw_ticker}"]},
+            "columns": ["close", "high", "low", "open", "volume"]
+        }).encode('utf-8')
+
+        for attempt in range(2):
+            try:
+                tv_url = "https://scanner.tradingview.com/indonesia/scan"
+                headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': random.choice(user_agents),
+                    'Accept': 'application/json',
+                    'Origin': 'https://www.tradingview.com',
+                    'Referer': 'https://www.tradingview.com/'
+                }
+                
+                req = urllib.request.Request(tv_url, data=payload, headers=headers)
+                
+                with urllib.request.urlopen(req, timeout=4) as response:
+                    r = json.loads(response.read().decode('utf-8'))
+                    if r.get('data') and len(r['data']) > 0:
+                        props = r['data'][0]['d']
+                        if props[0] is not None:
+                            live_price = float(props[0])
+                            live_high = float(props[1])
+                            live_low = float(props[2])
+                            live_open = float(props[3])
+                            live_vol = int(props[4])
+                            tv_success = True
+                            print(f"[TV] Sukses mengambil data live {raw_ticker} (Attempt {attempt+1})")
+                            break
+                    else:
+                        print(f"[TV] Data kosong dari API untuk {raw_ticker}. Langsung fallback ke Yahoo.")
+                        break # Tidak ada data, langsung putus tanpa retry
+            except Exception as e:
+                err_msg = str(e)
+                print(f"[TV] Fetch Error {raw_ticker} (Attempt {attempt+1}): {err_msg}")
+                if "HTTP Error 403" in err_msg or "HTTP Error 401" in err_msg:
+                    print(f"[TV] Terkena blokir, Bypass ke Yahoo.")
+                    break
+                if attempt == 0:
+                    time.sleep(0.5)
+
+        if not tv_success:
+            print(f"[YAHOO] Menggunakan proteksi Fallback ({ticker_jk})...")
 
         # Fallback 1: yfinance fast_info
         if not live_price or live_price == 0:
