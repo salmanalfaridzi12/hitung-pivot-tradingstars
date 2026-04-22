@@ -305,13 +305,10 @@ export default function PivotAnalyzer() {
       if (!res.ok) {
         // --- LIVE SCRAPE FALLBACK ---
         try {
-          const tvRes = await fetch("https://scanner.tradingview.com/indonesia/scan", {
+          const tvRes = await fetch("/api/fallback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              symbols: { tickers: [`IDX:${code}`] },
-              columns: ["open", "high", "low", "close", "volume"]
-            })
+            body: JSON.stringify({ symbol: code })
           });
           if (tvRes.ok) {
             const tvData = await tvRes.json();
@@ -417,13 +414,10 @@ export default function PivotAnalyzer() {
 
       if (!res.ok) {
         try {
-          const tvRes = await fetch("https://scanner.tradingview.com/indonesia/scan", {
+          const tvRes = await fetch("/api/fallback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              symbols: { tickers: [`IDX:${code}`] },
-              columns: ["open", "high", "low", "close", "volume"]
-            })
+            body: JSON.stringify({ symbol: code })
           });
           if (tvRes.ok) {
             const tvData = await tvRes.json();
