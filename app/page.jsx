@@ -537,6 +537,66 @@ export default function PivotAnalyzer() {
     }
   };
 
+  const handleCopyText = async () => {
+    if (!result) return;
+    const cp = parseFloat(currentPrice) || parseFloat(close);
+    if (!cp || isNaN(cp)) {
+      setFetchStatus({ type: "error", msg: "Harga Saat Ini belum terisi untuk kalkulasi %."});
+      return;
+    }
+    const potR2 = (((result.R2 - cp) / cp) * 100).toFixed(2);
+    const potR1 = (((result.R1 - cp) / cp) * 100).toFixed(2);
+    const riskS1 = (((cp - result.S1) / cp) * 100).toFixed(2);
+
+    const txt = `Setup Premium $${stockCode || "TICKER"} Berhasil Terdeteksi! 👑
+Gak butuh tebak-tebakan, kita main pake data. Support & Resistance udah rapi, tinggal eksekusi!
+
+📊 TRADING STARS - PIVOT PRO
+💰 Max Potensi: +${potR2}%
+🛡️ Max Risk: -${riskS1}%
+📈 Plan:
+
+R1: ${fmt(result.R1)} (+${potR1}%)
+R2: ${fmt(result.R2)} (+${potR2}%)
+S1: ${fmt(result.S1)} (-${riskS1}%)
+
+Jangan telat masuk, ntar nyesel liat running trade.
+🔗 https://t.me/TRADINGBATC`;
+
+    try {
+      await navigator.clipboard.writeText(txt);
+      setFetchStatus({ type: "success", msg: "✅ Teks Setup berhasil disalin!" });
+      setTimeout(() => setFetchStatus(null), 3000);
+    } catch (e) {
+      alert("Gagal copy teks.");
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    const node = document.getElementById("share-export-card");
+    if (!node) return;
+    try {
+      setFetchStatus({ type: "success", msg: "⏳ Memproses Gambar..." });
+      await new Promise(r => setTimeout(r, 100)); // small delay to ensure render
+      const dataUrl = await toPng(node, { 
+        quality: 1, 
+        pixelRatio: 3,
+        backgroundColor: '#09090b',
+        cacheBust: true,
+      });
+      const link = document.createElement("a");
+      link.download = `TradingStars_Setup_${stockCode || 'Analysis'}.png`;
+      link.href = dataUrl;
+      link.click();
+      setFetchStatus({ type: "success", msg: "📸 Gambar berhasil disimpan!" });
+      setTimeout(() => setFetchStatus(null), 3000);
+    } catch (e) {
+      console.error(e);
+      setFetchStatus({ type: "error", msg: "❌ Gagal menyimpan gambar." });
+      setTimeout(() => setFetchStatus(null), 3000);
+    }
+  };
+
   // --- Pivot Ladder Row Config ----------------------------------------------
   const pivotRows = result
     ? [
@@ -1262,13 +1322,20 @@ export default function PivotAnalyzer() {
 
             {/* SHARE BUTTON OUTSIDE CAPTURE AREA */}
             {result && isClient && (
-              <button
-                onClick={captureImage}
-                className="w-full bg-slate-900 border border-purple-500/30 hover:bg-purple-500/10 hover:border-purple-500/50 text-white rounded-2xl py-4 flex items-center justify-center gap-2 font-black text-sm uppercase tracking-[0.15em] transition-all group shadow-xl shadow-purple-900/10 active:scale-[0.98]"
-              >
-                <ImageIcon className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
-                Share ke Grup
-              </button>
+              <div className="grid grid-cols-2 gap-3 mt-4 animate-in slide-in-from-bottom-4 duration-700 delay-200">
+                <button
+                  onClick={handleCopyText}
+                  className="w-full bg-slate-900 hover:bg-purple-500/10 border border-purple-500/50 text-purple-400 rounded-2xl py-3.5 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-purple-900/10 active:scale-95"
+                >
+                  <Share2 className="w-4 h-4" /> Copy Teks
+                </button>
+                <button
+                  onClick={handleDownloadImage}
+                  className="w-full bg-purple-600 hover:bg-purple-500 border border-purple-400/50 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-purple-500/30 active:scale-95"
+                >
+                  <ImageIcon className="w-4 h-4" /> Save Image
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1615,6 +1682,71 @@ export default function PivotAnalyzer() {
           </div>
         </div>
       )}
+
+      {/* HIDDEN EXPORT CARD */}
+      {result && isClient && (() => {
+        const cp = parseFloat(currentPrice) || parseFloat(close) || result.PP || 1;
+        return (
+          <div className="absolute -left-[9999px] top-0 pointer-events-none">
+            <div id="share-export-card" className="w-[400px] bg-[#09090b] border-[3px] border-purple-500/50 rounded-3xl p-8 shadow-[0_0_40px_rgba(168,85,247,0.2)] flex flex-col items-center">
+               {/* TS Logo & Header */}
+               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 p-[2px] shadow-lg shadow-purple-500/30 mb-4">
+                 <div className="w-full h-full bg-[#09090b] rounded-[14px] flex items-center justify-center">
+                   <span className="text-3xl font-black text-purple-400">TS</span>
+                 </div>
+               </div>
+               <h2 className="text-4xl font-black text-white tracking-tighter mb-2 uppercase">{stockCode || "IHSG"}</h2>
+               <div className="bg-purple-500/20 px-5 py-2 rounded-full border border-purple-500/30 mb-8">
+                 <p className="text-purple-300 text-xs font-black uppercase tracking-widest">Pivot Strategy Plan</p>
+               </div>
+
+               {/* Data Area */}
+               <div className="w-full space-y-3 mb-10">
+                 <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                   <div>
+                     <p className="text-[#a1a1aa] text-[10px] font-black uppercase tracking-widest mb-1.5">Target Price 2 (R2)</p>
+                     <p className="text-white text-2xl font-black">{fmt(result.R2)}</p>
+                   </div>
+                   <div className="bg-green-500/10 px-3 py-1.5 rounded-xl border border-green-500/20 shadow-inner">
+                     <p className="text-green-400 text-sm font-black text-right">
+                       +{(((result.R2 - cp) / cp) * 100).toFixed(2)}%
+                     </p>
+                   </div>
+                 </div>
+
+                 <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                   <div>
+                     <p className="text-[#a1a1aa] text-[10px] font-black uppercase tracking-widest mb-1.5">Target Price 1 (R1)</p>
+                     <p className="text-white text-2xl font-black">{fmt(result.R1)}</p>
+                   </div>
+                   <div className="bg-green-500/10 px-3 py-1.5 rounded-xl border border-green-500/20 shadow-inner">
+                     <p className="text-green-400 text-sm font-black text-right">
+                       +{(((result.R1 - cp) / cp) * 100).toFixed(2)}%
+                     </p>
+                   </div>
+                 </div>
+
+                 <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                   <div>
+                     <p className="text-[#a1a1aa] text-[10px] font-black uppercase tracking-widest mb-1.5">Stop Loss (S1)</p>
+                     <p className="text-white text-2xl font-black">{fmt(result.S1)}</p>
+                   </div>
+                   <div className="bg-red-500/10 px-3 py-1.5 rounded-xl border border-red-500/20 shadow-inner">
+                     <p className="text-red-400 text-sm font-black text-right">
+                       -{(((cp - result.S1) / cp) * 100).toFixed(2)}%
+                     </p>
+                   </div>
+                 </div>
+               </div>
+
+               {/* Watermark */}
+               <div className="w-full text-center border-t border-white/10 pt-5">
+                 <p className="text-[#71717a] text-[10px] font-bold uppercase tracking-[0.2em]">Generated by Trading Stars</p>
+               </div>
+            </div>
+          </div>
+        );
+      })()}
     </main>
   );
 }
