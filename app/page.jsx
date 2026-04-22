@@ -303,7 +303,40 @@ export default function PivotAnalyzer() {
 
       const data = await res.json();
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: data.detail || data.error || "Data emiten tidak ditemukan. Silakan Input Manual!" });
+        // --- LIVE SCRAPE FALLBACK ---
+        try {
+          const tvRes = await fetch("https://scanner.tradingview.com/indonesia/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              symbols: { tickers: [`IDX:${code}`] },
+              columns: ["open", "high", "low", "close", "volume"]
+            })
+          });
+          if (tvRes.ok) {
+            const tvData = await tvRes.json();
+            if (tvData && tvData.data && tvData.data.length > 0) {
+              const d = tvData.data[0].d; 
+              if (d && d.length >= 4 && d[3] > 0) {
+                setFetchStatus(null);
+                setOpen(String(d[0]));
+                setHigh(String(d[1]));
+                setLow(String(d[2]));
+                setClose(String(d[3]));
+                setCurrentPrice(String(d[3]));
+                if (d[4]) setVolume(String(d[4]));
+                setMa20Volume(""); 
+                setMa20Price("");
+                const tfLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[timeframe.toLowerCase()] || timeframe;
+                setFetchStatus({ type: "success", msg: `Data ${code} [${tfLabel}] terdeteksi via Live Scrape!` });
+                return;
+              }
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("TV Fallback failed", fallbackErr);
+        }
+        setFetchStatus({ type: "error", msg: data.detail || data.error || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
         return;
       }
 
@@ -383,7 +416,98 @@ export default function PivotAnalyzer() {
       const data = await res.json();
 
       if (!res.ok) {
-        setFetchStatus({ type: "error", msg: data.detail || data.error || "Data tidak ditemukan. Silakan Input Manual!" });
+        try {
+          const tvRes = await fetch("https://scanner.tradingview.com/indonesia/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              symbols: { tickers: [`IDX:${code}`] },
+              columns: ["open", "high", "low", "close", "volume"]
+            })
+          });
+          if (tvRes.ok) {
+            const tvData = await tvRes.json();
+            if (tvData && tvData.data && tvData.data.length > 0) {
+              const d = tvData.data[0].d; 
+              if (d && d.length >= 4 && d[3] > 0) {
+                setFetchStatus(null);
+                const o = String(d[0]);
+                const h = String(d[1]);
+                const l = String(d[2]);
+                const c = String(d[3]);
+                const curP = String(d[3]);
+                const v = d[4] ? String(d[4]) : "";
+                
+                setOpen(o); setHigh(h); setLow(l); setClose(c);
+                setVolume(v); setMa20Volume(""); setMa20Price(""); setCurrentPrice(curP);
+
+                setFetchStatus({ type: "success", msg: `Data ${code} [${timeframe}] terdeteksi via Live Scrape!` });
+                const hNum = parseFloat(h);
+                const lNum = parseFloat(l);
+                const cNum = parseFloat(c);
+                const oNum = parseFloat(o) || cNum;
+
+                if (!isNaN(hNum) && !isNaN(lNum) && !isNaN(cNum) && hNum >= lNum) {
+                   setLoading(true);
+                   setTimeout(() => {
+                     try {
+                       const p = (hNum + lNum + cNum) / 3;
+                       const levels = {
+                         R3: hNum + 2 * (p - lNum),
+                         R2: p + (hNum - lNum),
+                         R1: (2 * p) - lNum,
+                         PP: p,
+                         S1: (2 * p) - hNum,
+                         S2: p - (hNum - lNum),
+                         S3: lNum - 2 * (hNum - p)
+                       };
+                       setResult(levels);
+                       const detectedPattern = identifyPattern({ open: oNum, high: hNum, low: lNum, close: cNum });
+                       setPattern(detectedPattern);
+
+                       const cpNum = parseFloat(curP) || cNum;
+                       const nearestLvl = Object.entries(levels).reduce((prev, curr) =>
+                         Math.abs(curr[1] - cpNum) < Math.abs(prev[1] - cpNum) ? curr : prev,
+                         ["PP", levels.PP]
+                       );
+                       const conf = getConfluenceLabel(detectedPattern, { label: nearestLvl[0], value: nearestLvl[1] });
+                       setConfluence(conf);
+
+                       const entry = {
+                         id: Date.now(),
+                         stockCode: code,
+                         levels,
+                         date: new Date().toLocaleDateString("id-ID"),
+                         time: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+                         ohlc: { h: hNum, l: lNum, c: cNum, o: oNum },
+                       };
+                       setHistory(prev => {
+                          const newHistory = [entry, ...prev].slice(0, 20);
+                          if (typeof window !== 'undefined') {
+                            try { localStorage.setItem("pivot_history", JSON.stringify(newHistory)); } 
+                            catch (e) {}
+                          }
+                          return newHistory;
+                       });
+                     } catch (err) {
+                       console.error("Auto Calculate Fallback Error:", err);
+                     } finally {
+                       setLoading(false);
+                       setFetchLoading(false);
+                     }
+                   }, 400);
+                } else {
+                   setFetchLoading(false);
+                }
+                return;
+              }
+            }
+          }
+        } catch (fallbackErr) {
+          console.error("TV Fallback failed", fallbackErr);
+        }
+
+        setFetchStatus({ type: "error", msg: data.detail || data.error || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
         setFetchLoading(false);
         return;
       }
@@ -548,8 +672,8 @@ export default function PivotAnalyzer() {
     const potR1 = (((result.R1 - cp) / cp) * 100).toFixed(2);
     const riskS1 = (((cp - result.S1) / cp) * 100).toFixed(2);
 
-    const txt = `Setup Premium $${stockCode || "TICKER"} Berhasil Terdeteksi! 👑
-Gak butuh tebak-tebakan, kita main pake data. Support & Resistance udah rapi, tinggal eksekusi!
+    const txt = `Setup Premium $${stockCode || "TICKER"} Sinyal A1 Terdeteksi! 👑
+Radar Akumulasi menyala, Silent Buyer tertangkap basah di bawah.
 
 📊 TRADING STARS - PIVOT PRO
 💰 Max Potensi: +${potR2}%
@@ -559,7 +683,7 @@ R1: ${fmt(result.R1)} (+${potR1}%)
 R2: ${fmt(result.R2)} (+${potR2}%)
 S1: ${fmt(result.S1)} (-${riskS1}%)
 
-Jangan telat masuk, ntar nyesel liat running trade.
+Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
 🔗 https://t.me/TRADINGBATC`;
 
     try {
