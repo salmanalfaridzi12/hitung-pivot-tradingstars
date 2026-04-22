@@ -96,13 +96,10 @@ export default function PivotAnalyzer() {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   // -- State: Average Calculator
-  const [avgSekarang, setAvgSekarang] = useState("");
-  const [lotSekarang, setLotSekarang] = useState("");
-  const [hargaBaru, setHargaBaru] = useState("");
-  const [lotBaru, setLotBaru] = useState("");
+  const [avgSlots, setAvgSlots] = useState([{ id: 1, harga: "", lot: "" }, { id: 2, harga: "", lot: "" }]);
 
-  const newTotalLot = (parseFloat(lotSekarang) || 0) + (parseFloat(lotBaru) || 0);
-  const totalModalValue = ((parseFloat(avgSekarang) || 0) * (parseFloat(lotSekarang) || 0)) + ((parseFloat(hargaBaru) || 0) * (parseFloat(lotBaru) || 0));
+  const newTotalLot = avgSlots.reduce((acc, slot) => acc + (parseFloat(slot.lot) || 0), 0);
+  const totalModalValue = avgSlots.reduce((acc, slot) => acc + ((parseFloat(slot.harga) || 0) * (parseFloat(slot.lot) || 0)), 0);
   const newAverage = newTotalLot > 0 ? totalModalValue / newTotalLot : 0;
 
   // -- Refs
@@ -702,7 +699,7 @@ export default function PivotAnalyzer() {
         <nav className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 backdrop-blur-md">
           {[
             { id: "main",      label: "Analysis", icon: Zap     },
-            { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: Star },
+            { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: null },
             { id: "watchlist", label: "Watchlist", icon: Shield  },
             { id: "average",   label: "Average",   icon: Calculator },
             { id: "history",   label: "History",   icon: History },
@@ -718,7 +715,7 @@ export default function PivotAnalyzer() {
                   : "bg-slate-900/50 text-slate-400 border-transparent hover:text-purple-300"
               }`}
             >
-              <t.icon className={`w-3.5 h-3.5 flex-shrink-0`} />
+              {t.icon && <t.icon className={`w-3.5 h-3.5 flex-shrink-0`} />}
               <span className="tracking-tight hidden xs:inline-block sm:inline-block">{t.label}</span>
             </button>
           ))}
@@ -1416,46 +1413,82 @@ export default function PivotAnalyzer() {
         {/* ══ AVERAGE TAB ═══════════════════════════════════════════════════════════════════════ */}
         {tab === "average" && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-700 space-y-4">
-            <div className="bg-slate-900/60 p-6 sm:p-8 rounded-3xl border border-blue-500/20 shadow-[0_0_40px_rgba(59,130,246,0.05)] text-center relative overflow-hidden">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none" />
+            <div className="bg-slate-900/60 p-6 sm:p-8 rounded-3xl border border-purple-500/20 shadow-[0_0_40px_rgba(168,85,247,0.05)] text-center relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-purple-500/10 blur-[80px] pointer-events-none" />
               
               <div className="relative z-10 mb-8 max-w-sm mx-auto">
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30 mb-4">
                   <Calculator className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 uppercase tracking-widest leading-tight">
+                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400 uppercase tracking-widest leading-tight">
                   KALKULATOR DOWN AVG
                 </h2>
-                <p className="text-xs text-blue-400 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-blue-500/20 bg-blue-500/10 rounded-full inline-block py-1">
+                <p className="text-xs text-purple-400 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-purple-500/20 bg-purple-500/10 rounded-full inline-block py-1">
                   Hitung Average Baru Otomatis
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10 text-left mb-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1">Avg Sekarang</label>
-                  <input type="number" value={avgSekarang} onChange={(e) => setAvgSekarang(e.target.value)}
-                    placeholder="Contoh: 1500"
-                    className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all" />
+              {/* DYNAMIC SLOTS */}
+              <div className="relative z-10 text-left mb-6">
+                <div className="max-h-[35vh] overflow-y-auto pr-2 space-y-4 mb-4 custom-scrollbar">
+                  {avgSlots.map((slot, index) => (
+                    <div key={slot.id} className="flex gap-3 items-end">
+                      <div className="flex-[4] space-y-2">
+                        <label className="text-[10px] font-black text-purple-400/80 uppercase ml-2 flex items-center gap-1">
+                          {index === 0 ? "Avg Sekarang" : `Harga Beli ${index + 1}`}
+                        </label>
+                        <input type="number" 
+                           value={slot.harga}
+                           onChange={(e) => {
+                              const newSlots = [...avgSlots];
+                              newSlots[index].harga = e.target.value;
+                              setAvgSlots(newSlots);
+                           }}
+                           placeholder="Contoh: 1500"
+                           className="w-full bg-slate-950/50 border border-white/10 focus:border-purple-500/50 rounded-xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all"
+                        />
+                      </div>
+                      <div className="flex-[4] space-y-2">
+                        <label className="text-[10px] font-black text-purple-400/80 uppercase ml-2 flex items-center gap-1">
+                          {index === 0 ? "Lot Sekarang" : `Lot Beli ${index + 1}`}
+                        </label>
+                        <input type="number" 
+                           value={slot.lot}
+                           onChange={(e) => {
+                              const newSlots = [...avgSlots];
+                              newSlots[index].lot = e.target.value;
+                              setAvgSlots(newSlots);
+                           }}
+                           placeholder="Contoh: 100"
+                           className="w-full bg-slate-950/50 border border-white/10 focus:border-purple-500/50 rounded-xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all"
+                        />
+                      </div>
+                      {index === 0 ? (
+                        <div className="flex-[1] h-[46px]"></div>
+                      ) : (
+                        <div className="flex-[1] h-[46px] flex items-center justify-center">
+                          <button
+                             onClick={() => {
+                                setAvgSlots(avgSlots.filter(s => s.id !== slot.id));
+                             }}
+                             className="w-full h-full max-w-[46px] flex items-center justify-center text-red-400/70 hover:text-white bg-red-500/10 hover:bg-red-500/40 rounded-xl transition-all border border-red-500/20 hover:border-red-500"
+                          >
+                             <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1">Lot Sekarang</label>
-                  <input type="number" value={lotSekarang} onChange={(e) => setLotSekarang(e.target.value)}
-                    placeholder="Contoh: 100"
-                    className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-cyan-500/80 uppercase ml-2 flex items-center gap-1">Harga Beli Baru</label>
-                  <input type="number" value={hargaBaru} onChange={(e) => setHargaBaru(e.target.value)}
-                    placeholder="Contoh: 1400"
-                    className="w-full bg-slate-950/50 border border-cyan-500/30 rounded-2xl px-4 py-3 text-sm font-black text-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-cyan-500/80 uppercase ml-2 flex items-center gap-1">Lot Baru</label>
-                  <input type="number" value={lotBaru} onChange={(e) => setLotBaru(e.target.value)}
-                    placeholder="Contoh: 50"
-                    className="w-full bg-slate-950/50 border border-cyan-500/30 rounded-2xl px-4 py-3 text-sm font-black text-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all" />
-                </div>
+                
+                <button 
+                   onClick={() => {
+                     setAvgSlots([...avgSlots, { id: Date.now(), harga: "", lot: "" }]);
+                   }}
+                   className="w-full py-3.5 rounded-xl border border-dashed border-purple-500/50 text-purple-400 font-bold text-[10px] uppercase tracking-widest hover:bg-purple-500/10 hover:border-purple-400 transition-all flex items-center justify-center gap-2"
+                >
+                    <span className="text-[14px] font-black leading-none pb-[2px]">+</span> Tambah Harga
+                </button>
               </div>
 
               {/* LIVE RESULTS */}
@@ -1469,8 +1502,8 @@ export default function PivotAnalyzer() {
                   <p className="text-sm font-black text-green-400">{fmt(totalModalValue * 100)}</p>
                 </div>
                 <div className="flex justify-between items-center pt-2">
-                  <p className="text-sm font-black text-blue-400 uppercase tracking-widest">NEW AVERAGE</p>
-                  <p className="text-2xl font-black text-blue-500" style={{ textShadow: "0 0 20px rgba(59,130,246,0.3)" }}>
+                  <p className="text-sm font-black text-purple-400 uppercase tracking-widest">NEW AVERAGE</p>
+                  <p className="text-2xl font-black text-purple-500" style={{ textShadow: "0 0 20px rgba(168,85,247,0.3)" }}>
                     {fmt(Math.round(newAverage))}
                   </p>
                 </div>
