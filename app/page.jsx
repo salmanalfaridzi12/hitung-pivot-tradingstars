@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Target, Shield, AlertCircle,
   Share2, Save, Bell, LineChart, Table, History, Image as ImageIcon,
   ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar,
-  Loader2, CheckCircle2, XCircle, WifiOff, Star
+  Loader2, CheckCircle2, XCircle, WifiOff, Star, Calculator
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
@@ -94,6 +94,16 @@ export default function PivotAnalyzer() {
   const [confluence, setConfluence] = useState(null);
   const [isClient, setIsClient] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  // -- State: Average Calculator
+  const [avgSekarang, setAvgSekarang] = useState("");
+  const [lotSekarang, setLotSekarang] = useState("");
+  const [hargaBaru, setHargaBaru] = useState("");
+  const [lotBaru, setLotBaru] = useState("");
+
+  const newTotalLot = (parseFloat(lotSekarang) || 0) + (parseFloat(lotBaru) || 0);
+  const totalModalValue = ((parseFloat(avgSekarang) || 0) * (parseFloat(lotSekarang) || 0)) + ((parseFloat(hargaBaru) || 0) * (parseFloat(lotBaru) || 0));
+  const newAverage = newTotalLot > 0 ? totalModalValue / newTotalLot : 0;
 
   // -- Refs
   const analysisCardRef = useRef(null);
@@ -694,6 +704,7 @@ export default function PivotAnalyzer() {
             { id: "main",      label: "Analysis", icon: Zap     },
             { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: Star },
             { id: "watchlist", label: "Watchlist", icon: Shield  },
+            { id: "average",   label: "Average",   icon: Calculator },
             { id: "history",   label: "History",   icon: History },
           ].map((t) => (
             <button
@@ -1399,6 +1410,72 @@ export default function PivotAnalyzer() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══ AVERAGE TAB ═══════════════════════════════════════════════════════════════════════ */}
+        {tab === "average" && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-700 space-y-4">
+            <div className="bg-slate-900/60 p-6 sm:p-8 rounded-3xl border border-blue-500/20 shadow-[0_0_40px_rgba(59,130,246,0.05)] text-center relative overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500/10 blur-[80px] pointer-events-none" />
+              
+              <div className="relative z-10 mb-8 max-w-sm mx-auto">
+                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4">
+                  <Calculator className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 uppercase tracking-widest leading-tight">
+                  KALKULATOR DOWN AVG
+                </h2>
+                <p className="text-xs text-blue-400 font-bold uppercase tracking-widest mt-2 px-4 shadow-sm border border-blue-500/20 bg-blue-500/10 rounded-full inline-block py-1">
+                  Hitung Average Baru Otomatis
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10 text-left mb-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1">Avg Sekarang</label>
+                  <input type="number" value={avgSekarang} onChange={(e) => setAvgSekarang(e.target.value)}
+                    placeholder="Contoh: 1500"
+                    className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1">Lot Sekarang</label>
+                  <input type="number" value={lotSekarang} onChange={(e) => setLotSekarang(e.target.value)}
+                    placeholder="Contoh: 100"
+                    className="w-full bg-slate-950/50 border border-white/10 rounded-2xl px-4 py-3 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-cyan-500/80 uppercase ml-2 flex items-center gap-1">Harga Beli Baru</label>
+                  <input type="number" value={hargaBaru} onChange={(e) => setHargaBaru(e.target.value)}
+                    placeholder="Contoh: 1400"
+                    className="w-full bg-slate-950/50 border border-cyan-500/30 rounded-2xl px-4 py-3 text-sm font-black text-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-cyan-500/80 uppercase ml-2 flex items-center gap-1">Lot Baru</label>
+                  <input type="number" value={lotBaru} onChange={(e) => setLotBaru(e.target.value)}
+                    placeholder="Contoh: 50"
+                    className="w-full bg-slate-950/50 border border-cyan-500/30 rounded-2xl px-4 py-3 text-sm font-black text-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all" />
+                </div>
+              </div>
+
+              {/* LIVE RESULTS */}
+              <div className="relative z-10 bg-slate-950/80 p-5 rounded-2xl border border-white/5 space-y-4">
+                <div className="flex justify-between items-center pb-4 border-b border-white/5">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total Lot Akhir</p>
+                  <p className="text-sm font-black text-slate-100">{fmt(newTotalLot)} <span className="text-[10px] text-slate-500">Lot</span></p>
+                </div>
+                <div className="flex justify-between items-center pb-4 border-b border-white/5">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total Modal (Rp)</p>
+                  <p className="text-sm font-black text-green-400">{fmt(totalModalValue * 100)}</p>
+                </div>
+                <div className="flex justify-between items-center pt-2">
+                  <p className="text-sm font-black text-blue-400 uppercase tracking-widest">NEW AVERAGE</p>
+                  <p className="text-2xl font-black text-blue-500" style={{ textShadow: "0 0 20px rgba(59,130,246,0.3)" }}>
+                    {fmt(Math.round(newAverage))}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
