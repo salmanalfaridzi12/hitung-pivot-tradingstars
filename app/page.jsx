@@ -555,7 +555,6 @@ Gak butuh tebak-tebakan, kita main pake data. Support & Resistance udah rapi, ti
 💰 Max Potensi: +${potR2}%
 🛡️ Max Risk: -${riskS1}%
 📈 Plan:
-
 R1: ${fmt(result.R1)} (+${potR1}%)
 R2: ${fmt(result.R2)} (+${potR2}%)
 S1: ${fmt(result.S1)} (-${riskS1}%)
@@ -564,11 +563,27 @@ Jangan telat masuk, ntar nyesel liat running trade.
 🔗 https://t.me/TRADINGBATC`;
 
     try {
-      await navigator.clipboard.writeText(txt);
-      setFetchStatus({ type: "success", msg: "✅ Teks Setup berhasil disalin!" });
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(txt);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = txt;
+        textArea.style.position = "absolute";
+        textArea.style.left = "-999999px";
+        document.body.prepend(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (error) {
+          console.error("Fallback eksekusi gagal", error);
+        } finally {
+          textArea.remove();
+        }
+      }
+      setFetchStatus({ type: "success", msg: "✅ Analisa berhasil disalin!" });
       setTimeout(() => setFetchStatus(null), 3000);
     } catch (e) {
-      alert("Gagal copy teks.");
+      alert("Gagal copy teks: " + e.message);
     }
   };
 
