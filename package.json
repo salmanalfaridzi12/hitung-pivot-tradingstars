@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@google/genai": "^2.10.0",
     "@tailwindcss/postcss": "^4.2.2",
     "clsx": "^2.1.1",
     "cookie": "^1.1.1",
     "dotenv": "^17.4.0",
     "html-to-image": "^1.11.13",
+    "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.3",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.7.0",

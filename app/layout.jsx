@@ -1,6 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "Pivot Analyzer - TradingStars",
   description: "Advanced Pivot Point Analyzer for IDX Traders by TradingStars",
   icons: {

@@ -8,10 +8,15 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
+export default function RiskRewardVisualizer({ entry, stopLoss, target, entryLow, entryHigh }) {
   const e = parseFloat(entry);
   const sl = parseFloat(stopLoss);
   const t = parseFloat(target);
+
+  // Zona entry (range) — kalau ada, tampilkan low–high alih-alih satu harga
+  const eLow = parseFloat(entryLow);
+  const eHigh = parseFloat(entryHigh);
+  const hasZone = !isNaN(eLow) && !isNaN(eHigh) && eLow !== eHigh;
 
   if (isNaN(e) || isNaN(sl) || isNaN(t) || e === sl) {
     return (
@@ -86,8 +91,14 @@ export default function RiskRewardVisualizer({ entry, stopLoss, target }) {
               <TrendingUp className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-[10px] text-slate-300 font-medium">ENTRY</p>
-              <p className="text-sm font-black text-slate-200">Rp {e.toLocaleString("id-ID")}</p>
+              <p className="text-[10px] text-slate-300 font-medium">{hasZone ? "ENTRY ZONE" : "ENTRY"}</p>
+              {hasZone ? (
+                <p className="text-sm font-black text-slate-200">
+                  Rp {eLow.toLocaleString("id-ID")} <span className="text-slate-500">–</span> Rp {eHigh.toLocaleString("id-ID")}
+                </p>
+              ) : (
+                <p className="text-sm font-black text-slate-200">Rp {e.toLocaleString("id-ID")}</p>
+              )}
             </div>
           </div>
 

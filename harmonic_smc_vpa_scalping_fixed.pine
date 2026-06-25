@@ -1,0 +1,1965 @@
+//@version=5
+strategy("TradingStars V2.0 [Strategy M5/M15]", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=100, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.05)
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║          HARMONIC + SMC + VPA — SCALPING M5/M15         ║
+// ║  Fitur: XABCD Pattern | Order Block | BOS/CHoCH | VPA   ║
+// ║  Signal Score 0-5 | Winrate Tracker per Pola            ║
+// ╚══════════════════════════════════════════════════════════╝
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 1 — INPUTS
+// ═══════════════════════════════════════════════════════════
+
+// ── Harmonic ────────────────────────────────────────────────
+length      = input.int(4,     title="Sensitivitas Pivot (M5/M15: 3-5)", minval=2, maxval=20, group="⚙️ Harmonic")
+zone_buffer = input.float(0.001, title="Buffer Area (%)", step=0.001, group="⚙️ Harmonic")
+fib_tol     = input.float(0.12,  title="Toleransi Fibo (Lebarkan jika jarang sinyal)", step=0.01, group="⚙️ Harmonic")
+box_width   = input.int(20,    title="Lebar Box (bar)", minval=5, maxval=100, group="⚙️ Harmonic")
+
+show_gartley   = input.bool(true, title="Gartley",   group="📐 Pola Harmonic")
+show_bat       = input.bool(true, title="Bat",        group="📐 Pola Harmonic")
+show_butterfly = input.bool(true, title="Butterfly",  group="📐 Pola Harmonic")
+show_crab      = input.bool(true, title="Crab",       group="📐 Pola Harmonic")
+show_shark     = input.bool(true, title="Shark",      group="📐 Pola Harmonic")
+show_cypher    = input.bool(true, title="Cypher",     group="📐 Pola Harmonic")
+
+col_gartley    = input.color(color.blue,   title="Warna Gartley",   group="🎨 Warna")
+col_bat        = input.color(color.orange, title="Warna Bat",       group="🎨 Warna")
+col_butterfly  = input.color(color.purple, title="Warna Butterfly", group="🎨 Warna")
+col_crab       = input.color(color.teal,   title="Warna Crab",      group="🎨 Warna")
+col_shark      = input.color(color.red,    title="Warna Shark",     group="🎨 Warna")
+col_cypher     = input.color(color.lime,   title="Warna Cypher",    group="🎨 Warna")
+
+// ── SMC ─────────────────────────────────────────────────────
+show_smc   = input.bool(true, title="Aktifkan SMC",          group="🧠 SMC")
+show_ob    = input.bool(true, title="Tampilkan Order Block", group="🧠 SMC")
+show_bos   = input.bool(true, title="Tampilkan Lanjut/Ganti Tren", group="🧠 SMC")
+show_fvg   = input.bool(true, title="Tampilkan Area Kosong (FVG)", group="🧠 SMC")
+show_sweep = input.bool(true, title="Tampilkan Jebakan (Sweep)", group="🧠 SMC")
+show_pd    = input.bool(true, title="Tampilkan Area Mahal/Murah", group="🧠 SMC")
+
+// ── VPA ─────────────────────────────────────────────────────
+show_vpa       = input.bool(true,  title="Aktifkan VPA",           group="📊 VPA")
+vol_ma_len     = input.int(20,     title="Volume MA Length",        group="📊 VPA", minval=5)
+vol_spike_mult = input.float(1.5,  title="Spike Multiplier",        group="📊 VPA", step=0.1)
+show_vol_bars  = input.bool(true,  title="Warna Bar Volume",        group="📊 VPA")
+
+// ── Filter Waktu Backtest (Khusus Akun Gratis) ────────────────
+start_time = input.time(timestamp("2024-06-01T00:00:00"), "Mulai Backtest", group="⏰ Filter Waktu Backtest")
+end_time   = input.time(timestamp("2099-01-01T00:00:00"), "Akhir Backtest", group="⏰ Filter Waktu Backtest")
+in_date_range = time >= start_time and time <= end_time
+
+// ── Fitur Premium Scalping ──────────────────────────────────
+show_mtf       = input.bool(true, title="Tampilkan Kompas Arah Angin (MTF)", group="🚀 Fitur Scalping")
+show_sessions  = input.bool(true, title="Tampilkan Jam Sibuk Bandar (Killzones)", group="🚀 Fitur Scalping")
+tz             = input.string("America/New_York", title="Zona Waktu Sesi (Default EST)", group="🚀 Fitur Scalping")
+asian_time     = input.session("2000-0000", title="Asian Killzone (Konsolidasi)", group="🚀 Fitur Scalping")
+london_time    = input.session("0200-0500", title="London Killzone (Manipulasi)", group="🚀 Fitur Scalping")
+ny_time        = input.session("0700-1000", title="New York Killzone (Tren Utama)", group="🚀 Fitur Scalping")
+show_liq       = input.bool(true, title="Tampilkan Kolam Ritel (EQH/EQL Liquidity)", group="🚀 Fitur Scalping")
+use_trailing   = input.bool(true, title="Gunakan Pengawal Keuntungan (Trailing Stop)", group="🚀 Fitur Scalping")
+show_vwap      = input.bool(true, title="Tampilkan Garis VWAP (Harga Rata-Rata Bandar)", group="🚀 Fitur Scalping")
+show_pdhl      = input.bool(true, title="Tampilkan Pagar Harga Kemarin (PDH/PDL)", group="🚀 Fitur Scalping")
+show_volatility= input.bool(true, title="Tampilkan Speedometer Volatilitas", group="🚀 Fitur Scalping")
+show_poc       = input.bool(true, title="Tampilkan Tembok POC (Di Tabel)", group="🚀 Fitur Scalping")
+
+// ── V3.0 Final Boss Upgrade ──────────────────────────────────
+use_partial_tp = input.bool(true, title="Eksekusi Partial TP (Ambil Gaji 50% di Tengah)", group="👑 Final Boss Upgrade")
+strict_killzone = input.bool(true, title="Gembok Disiplin Waktu (Hanya Buka di Sesi London/NY)", group="👑 Final Boss Upgrade")
+use_webhook    = input.bool(false, title="Gunakan Notifikasi Webhook/Telegram (Format JSON)", group="👑 Final Boss Upgrade")
+
+// ── V4.0 Mega-Upgrade ────────────────────────────────────────
+show_displacement = input.bool(true, title="Tampilkan Displacement Candle (DISP)", group="🔥 V4.0 Mega-Upgrade")
+min_grade_to_show = input.string("C", title="Minimal Grade Sinyal (A/B/C)", options=["A", "B", "C"], group="🔥 V4.0 Mega-Upgrade")
+max_daily_loss_pct = input.float(2.0, title="Batas Rugi Harian (%)", group="🔥 V4.0 Mega-Upgrade", step=0.1)
+account_size = input.float(10000, title="Modal Akun (USD)", group="🔥 V4.0 Mega-Upgrade")
+risk_per_trade_pct = input.float(1.0, title="Risiko Per Trade (%)", group="🔥 V4.0 Mega-Upgrade", step=0.1)
+show_position_size = input.bool(true, title="Tampilkan Kalkulasi Lot", group="🔥 V4.0 Mega-Upgrade")
+show_session_vwap = input.bool(true, title="Tampilkan Session VWAP", group="🔥 V4.0 Mega-Upgrade")
+display_mode = input.string("Advanced", title="Mode Tampilan Visual", options=["Simple", "Advanced"], group="🔥 V4.0 Mega-Upgrade")
+bool is_adv = display_mode == "Advanced"
+
+use_macro_filter = input.bool(true, title="Gunakan Macro Trend Filter (D1/W1)", group="🎯 V4.1 Accuracy Upgrade")
+show_macro_ema = input.bool(false, title="Tampilkan Macro EMA Line", group="🎯 V4.1 Accuracy Upgrade")
+use_spread_filter = input.bool(true, title="Gunakan Spread Filter", group="🎯 V4.1 Accuracy Upgrade")
+max_spread_multiplier = input.float(3.0, title="Max Spread Multiplier", group="🎯 V4.1 Accuracy Upgrade", step=0.1)
+use_tilt_protection = input.bool(true, title="Gunakan Tilt Protection (Stop Loss Beruntun)", group="🎯 V4.1 Accuracy Upgrade")
+reset_tilt = input.bool(false, title="🔄 Reset Tilt Mode Manual", group="🎯 V4.1 Accuracy Upgrade")
+max_consec_loss = input.int(5, title="Max Consecutive Loss", group="🎯 V4.1 Accuracy Upgrade", minval=1)
+use_candle_confirm = input.bool(true, title="Gunakan Konfirmasi Candle (Harmonic)", group="🎯 V4.1 Accuracy Upgrade")
+show_fvg_strength = input.bool(true, title="Tampilkan FVG Kuat (Warna Solid)", group="🎯 V4.1 Accuracy Upgrade")
+use_m15_filter = input.bool(false, title="Gunakan M15 Trend Filter (Khusus Scalping M1/M5)", group="🎯 V4.1 Accuracy Upgrade")
+use_h4_filter = input.bool(false, title="Aktifkan Filter H4 (Swing Mode)", group="🎯 V4.1 Accuracy Upgrade")
+use_quick_entry = input.bool(true, title="⚡ SMC Quick Entry (Scalping)", group="🎯 V4.1 Accuracy Upgrade")
+use_sweep_entry = input.bool(true, title="🧹 Sweep Quick Entry (Turtle Soup)", group="🎯 V4.1 Accuracy Upgrade")
+
+// ── Visual Trader Manual ─────────────────────────────────────
+show_magnet = input.bool(true, title="Tampilkan Garis Magnet (D/W/M Open)", group="🎨 Visual Trader Manual")
+show_asian = input.bool(true, title="Tampilkan Asian Range & Sweep Targets", group="🎨 Visual Trader Manual")
+show_ny_open = input.bool(true, title="Tampilkan NY True Day Open (08:30 EST)", group="🎨 Visual Trader Manual")
+// ═══════════════════════════════════════════════════════════
+// SECTION 2 — PIVOT DETECTION
+// ═══════════════════════════════════════════════════════════
+ph = ta.pivothigh(high, length, length)
+pl = ta.pivotlow(low,  length, length)
+
+var float[] p_vals  = array.new_float(5, na)
+var int[]   p_bars  = array.new_int(5,  na)
+var int[]   p_types = array.new_int(5,  0)
+
+update_pivot(val, b, typ) =>
+    array.unshift(p_vals,  val)
+    array.pop(p_vals)
+    array.unshift(p_bars,  b)
+    array.pop(p_bars)
+    array.unshift(p_types, typ)
+    array.pop(p_types)
+
+// ═══ [FITUR GLOBAL] ATR 14 ═══
+float atr14 = ta.atr(14)
+
+bool is_crypto = syminfo.type == "crypto"
+string unit_str = is_crypto ? " Unit" : " Lot"
+
+// ═══ [FITUR BARU] Max Daily Loss Lock ═══
+var float start_of_day_profit = 0.0
+var int last_day = 0
+
+if dayofmonth != last_day
+    start_of_day_profit := strategy.netprofit
+    last_day := dayofmonth
+
+float today_profit = (strategy.netprofit - start_of_day_profit) + strategy.openprofit
+bool is_daily_locked = today_profit <= -(max_daily_loss_pct / 100) * account_size
+
+var label loss_lbl = na
+if is_daily_locked
+    if na(loss_lbl)
+        loss_lbl := label.new(bar_index, high + atr14, "⛔ DAILY LOSS LIMIT REACHED", color=color.red, textcolor=color.white, style=label.style_label_down, size=size.normal)
+    else
+        label.set_xy(loss_lbl, bar_index, high + atr14)
+else
+    if not na(loss_lbl)
+        label.delete(loss_lbl)
+        loss_lbl := na
+
+if not na(ph)
+    update_pivot(ph, bar_index[length], 1)
+if not na(pl)
+    update_pivot(pl, bar_index[length], -1)
+
+// ═══ [V4.1] TILT PROTECTION (Consecutive Loss Filter) ═══
+var int consec_loss = 0
+
+bool new_trade_closed = strategy.closedtrades > strategy.closedtrades[1]
+bool last_was_profit  = strategy.netprofit > strategy.netprofit[1]
+
+if new_trade_closed
+    consec_loss := last_was_profit ? 0 : consec_loss + 1
+
+if reset_tilt
+    consec_loss := 0
+
+bool is_on_tilt = use_tilt_protection and consec_loss >= max_consec_loss
+
+var label tilt_lbl = na
+if is_on_tilt
+    if na(tilt_lbl)
+        tilt_lbl := label.new(bar_index, high + atr14 * 2.5, "🧘 TILT MODE — Robot Istirahat", color=color.purple, textcolor=color.white, style=label.style_label_down, size=size.normal)
+    else
+        label.set_xy(tilt_lbl, bar_index, high + atr14 * 2.5)
+else
+    if not na(tilt_lbl)
+        label.delete(tilt_lbl)
+        tilt_lbl := na
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 3 — FIBONACCI HELPERS
+// ═══════════════════════════════════════════════════════════
+inRange(val, target, tol) =>
+    math.abs(val - target) <= tol
+
+// Gartley: XAB≈0.618, ABC=0.382-0.886, BCD=1.13-1.618, XAD≈0.786
+isGartley(xab, abc, bcd, xad) =>
+    inRange(xab, 0.618, fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.13  - fib_tol) and (bcd <= 1.618 + fib_tol) and
+     inRange(xad, 0.786, fib_tol)
+
+// Bat: XAB=0.382-0.500, ABC=0.382-0.886, BCD=1.618-2.618, XAD≈0.886
+isBat(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.500 + fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.618 + fib_tol) and
+     inRange(xad, 0.886, fib_tol)
+
+// Butterfly: XAB≈0.786, ABC=0.382-0.886, BCD=1.618-2.618, XAD=1.27-1.618
+isButterfly(xab, abc, bcd, xad) =>
+    inRange(xab, 0.786, fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.618 + fib_tol) and
+     (xad >= 1.27  - fib_tol) and (xad <= 1.618 + fib_tol)
+
+// Crab: XAB=0.382-0.618, ABC=0.382-0.886, BCD=2.618-3.618, XAD≈1.618
+isCrab(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 2.618 - fib_tol) and (bcd <= 3.618 + fib_tol) and
+     inRange(xad, 1.618, fib_tol)
+
+// Shark: XAB=0.382-0.618, ABC=1.13-1.618, BCD=1.618-2.24, XAD=0.886-1.13
+isShark(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 1.13  - fib_tol) and (abc <= 1.618 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.24  + fib_tol) and
+     (xad >= 0.886 - fib_tol) and (xad <= 1.13  + fib_tol)
+
+// Cypher: XAB=0.382-0.618, ABC=1.13-1.414, BCD=1.272-2.00, XAD≈0.786
+isCypher(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 1.13  - fib_tol) and (abc <= 1.414 + fib_tol) and
+     (bcd >= 1.272 - fib_tol) and (bcd <= 2.00  + fib_tol) and
+     inRange(xad, 0.786, fib_tol)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 4 — VPA (VOLUME PRICE ANALYSIS)
+// ═══════════════════════════════════════════════════════════
+vol_ma       = ta.sma(volume, vol_ma_len)
+vol_ratio    = volume / vol_ma
+is_vol_spike = vol_ratio >= vol_spike_mult
+is_bull_vol  = close > open and is_vol_spike   // Bullish spike
+is_bear_vol  = close < open and is_vol_spike   // Bearish spike
+is_vol_avg   = vol_ratio >= 1.0 and not is_vol_spike
+
+// Warna bar untuk volume
+barcolor_col = is_bull_vol ? color.new(color.lime, 20) :
+               is_bear_vol ? color.new(color.red,  20) :
+               is_vol_avg  ? color.new(color.gray, 50) :
+               color.new(color.gray, 80)
+
+// [FIX #1] barcolor() harus di global scope, bukan di dalam if block
+barcolor(show_vpa and show_vol_bars ? barcolor_col : na)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5 — SMC: ORDER BLOCK DETECTION
+// ═══════════════════════════════════════════════════════════
+// Order Block = last candle berlawanan sebelum impulse move
+// Bullish OB = last bearish candle sebelum impulse naik
+// Bearish OB = last bullish candle sebelum impulse turun
+
+var float ob_bull_top = na
+var float ob_bull_bot = na
+var int   ob_bull_bar = na
+var float ob_bear_top = na
+var float ob_bear_bot = na
+var int   ob_bear_bar = na
+
+// Impulse: candle lebih besar dari rata-rata ATR
+bull_impls = close > open and (close - open) > atr14 * 0.5
+bear_impls = close < open and (open - close) > atr14 * 0.5
+
+var int bull_ob_count = 0
+var int bear_ob_count = 0
+
+// Cek candle sebelumnya berlawanan arah
+if bull_impls and close[1] < open[1]
+    ob_bull_top := high[1]
+    ob_bull_bot := low[1]
+    ob_bull_bar := bar_index[1]
+    bull_ob_count += 1
+    bear_ob_count := 0
+
+if bear_impls and close[1] > open[1]
+    ob_bear_top := high[1]
+    ob_bear_bot := low[1]
+    ob_bear_bar := bar_index[1]
+    bear_ob_count += 1
+    bull_ob_count := 0
+
+var float bb_bear_top = na
+var float bb_bear_bot = na
+var int   bb_bear_bar = na
+var float bb_bull_top = na
+var float bb_bull_bot = na
+var int   bb_bull_bar = na
+
+// Invalidate OB jika harga sudah menembus jauh melewatinya, jadikan Breaker Block
+if not na(ob_bull_bar) and close < ob_bull_bot - atr14
+    bb_bear_top := ob_bull_top
+    bb_bear_bot := ob_bull_bot
+    bb_bear_bar := ob_bull_bar
+    ob_bull_bar := na
+    ob_bull_top := na
+    ob_bull_bot := na
+
+if not na(ob_bear_bar) and close > ob_bear_top + atr14
+    bb_bull_top := ob_bear_top
+    bb_bull_bot := ob_bear_bot
+    bb_bull_bar := ob_bear_bar
+    ob_bear_bar := na
+    ob_bear_top := na
+    ob_bear_bot := na
+
+if not na(bb_bear_bar) and close > bb_bear_top + atr14
+    bb_bear_bar := na
+if not na(bb_bull_bar) and close < bb_bull_bot - atr14
+    bb_bull_bar := na
+
+if not na(ob_bear_bar) and close > ob_bear_top + atr14
+    ob_bear_bar := na
+    ob_bear_top := na
+    ob_bear_bot := na
+
+bool is_overlap = not na(ob_bull_top) and not na(ob_bear_top) and (ob_bull_top >= ob_bear_bot) and (ob_bull_bot <= ob_bear_top)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5.1 — MTF ORDER BLOCK (H4)
+// ═══════════════════════════════════════════════════════════
+f_htf_ob() =>
+    atr14_htf = ta.atr(14)
+    bull_impls_htf = close > open and (close - open) > atr14_htf * 0.5
+    bear_impls_htf = close < open and (open - close) > atr14_htf * 0.5
+    
+    var float htf_ob_bull_top = na
+    var float htf_ob_bull_bot = na
+    var float htf_ob_bear_top = na
+    var float htf_ob_bear_bot = na
+    
+    if bull_impls_htf and close[1] < open[1]
+        htf_ob_bull_top := high[1]
+        htf_ob_bull_bot := low[1]
+        
+    if bear_impls_htf and close[1] > open[1]
+        htf_ob_bear_top := high[1]
+        htf_ob_bear_bot := low[1]
+        
+    [htf_ob_bull_top, htf_ob_bull_bot, htf_ob_bear_top, htf_ob_bear_bot]
+
+[h4_ob_bull_top, h4_ob_bull_bot, h4_ob_bear_top, h4_ob_bear_bot] = request.security(syminfo.tickerid, "240", f_htf_ob(), lookahead=barmerge.lookahead_off)
+
+var box h4BullBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.green, 90), border_color=color.green, border_style=line.style_dotted, border_width=2, text="[H4 OB BULL]", text_color=color.new(color.green, 50), text_halign=text.align_right, text_size=size.small)
+var box h4BearBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.red, 90), border_color=color.red, border_style=line.style_dotted, border_width=2, text="[H4 OB BEAR]", text_color=color.new(color.red, 50), text_halign=text.align_right, text_size=size.small)
+
+if show_smc
+    if not na(h4_ob_bull_top)
+        box.set_lefttop(h4BullBox, bar_index - 50, h4_ob_bull_top)
+        box.set_rightbottom(h4BullBox, bar_index + 10, h4_ob_bull_bot)
+    if not na(h4_ob_bear_top)
+        box.set_lefttop(h4BearBox, bar_index - 50, h4_ob_bear_top)
+        box.set_rightbottom(h4BearBox, bar_index + 10, h4_ob_bear_bot)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5.5 — FVG (Area Kosong)
+// ═══════════════════════════════════════════════════════════
+var float fvg_bull_top = na
+var float fvg_bull_bot = na
+var int   fvg_bull_bar = na
+var float fvg_bear_top = na
+var float fvg_bear_bot = na
+var int   fvg_bear_bar = na
+
+// ═══ [V4.1] FVG STRENGTH SCORING ═══
+var bool fvg_bull_strong = false
+var bool fvg_bear_strong = false
+
+if show_smc and show_fvg
+    // Deteksi Bullish FVG
+    if low > high[2] and close[1] > open[1]
+        fvg_bull_top := low
+        fvg_bull_bot := high[2]
+        fvg_bull_bar := bar_index[1]
+        fvg_bull_strong := is_bull_vol[1]
+    
+    // Deteksi Bearish FVG
+    if high < low[2] and close[1] < open[1]
+        fvg_bear_top := high
+        fvg_bear_bot := low[2]
+        fvg_bear_bar := bar_index[1]
+        fvg_bear_strong := is_bear_vol[1]
+
+    // Mitigasi (Hapus jika harga sudah menutup celah sepenuhnya)
+    if not na(fvg_bull_bot) and low < fvg_bull_bot
+        fvg_bull_top := na
+        fvg_bull_bot := na
+        fvg_bull_bar := na
+        fvg_bull_strong := false
+
+    if not na(fvg_bear_top) and high > fvg_bear_top
+        fvg_bear_top := na
+        fvg_bear_bot := na
+        fvg_bear_bar := na
+        fvg_bear_strong := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6 — SMC: BOS / CHoCH DETECTION
+// ═══════════════════════════════════════════════════════════
+var float lastSwingHigh    = na
+var float lastSwingLow     = na
+var int   lastSHBar        = na
+var int   lastSLBar        = na
+var bool  prevBullishStruct = false
+
+var float prevSwingHigh    = na
+var float prevSwingLow     = na
+var int   prevSHBar        = na
+var int   prevSLBar        = na
+
+var line eqhLine = na
+var label eqhLbl = na
+var float eqhLevel = na
+
+var line eqlLine = na
+var label eqlLbl = na
+var float eqlLevel = na
+
+if not na(ph)
+    prevSwingHigh := lastSwingHigh
+    prevSHBar     := lastSHBar
+    lastSwingHigh := ph
+    lastSHBar     := bar_index[length]
+    if show_liq and not na(prevSwingHigh) and math.abs(ph - prevSwingHigh) < atr14 * 0.2
+        eqhLevel := math.max(ph, prevSwingHigh)
+        if not na(eqhLine)
+            line.delete(eqhLine)
+            label.delete(eqhLbl)
+        eqhLine := line.new(prevSHBar, eqhLevel, bar_index + 10, eqhLevel, color=color.yellow, style=line.style_dashed, width=2)
+        eqhLbl := label.new(bar_index + 5, eqhLevel, "💰 EQH (Kolam Atas)", style=label.style_none, textcolor=color.yellow, size=size.small)
+
+if not na(pl)
+    prevSwingLow  := lastSwingLow
+    prevSLBar     := lastSLBar
+    lastSwingLow  := pl
+    lastSLBar     := bar_index[length]
+    if show_liq and not na(prevSwingLow) and math.abs(pl - prevSwingLow) < atr14 * 0.2
+        eqlLevel := math.min(pl, prevSwingLow)
+        if not na(eqlLine)
+            line.delete(eqlLine)
+            label.delete(eqlLbl)
+        eqlLine := line.new(prevSLBar, eqlLevel, bar_index + 10, eqlLevel, color=color.yellow, style=line.style_dashed, width=2)
+        eqlLbl := label.new(bar_index + 5, eqlLevel, "💰 EQL (Kolam Bawah)", style=label.style_none, textcolor=color.yellow, size=size.small)
+
+// Manage EQH/EQL Mitigation
+if not na(eqhLine)
+    if high > eqhLevel
+        line.delete(eqhLine)
+        label.delete(eqhLbl)
+        eqhLine := na
+        eqhLbl := na
+        eqhLevel := na
+    else
+        line.set_xy2(eqhLine, bar_index + 10, eqhLevel)
+        label.set_xy(eqhLbl, bar_index + 2, eqhLevel)
+
+if not na(eqlLine)
+    if low < eqlLevel
+        line.delete(eqlLine)
+        label.delete(eqlLbl)
+        eqlLine := na
+        eqlLbl := na
+        eqlLevel := na
+    else
+        line.set_xy2(eqlLine, bar_index + 10, eqlLevel)
+        label.set_xy(eqlLbl, bar_index + 2, eqlLevel)
+
+// BOS: harga break structure yang sudah terbentuk
+bull_bos = not na(lastSwingHigh) and ta.crossover(close,  lastSwingHigh)
+bear_bos = not na(lastSwingLow)  and ta.crossunder(close, lastSwingLow)
+
+// [FIX #6] CHoCH: nama variabel diperbaiki agar sesuai arah sebenarnya
+// choch_bull = dari bearish structure → break high = Change of Character ke BULLISH
+// choch_bear = dari bullish structure → break low  = Change of Character ke BEARISH
+choch_bull = bull_bos and not prevBullishStruct  // bearish → break high = CHoCH to bullish
+choch_bear = bear_bos and prevBullishStruct       // bullish → break low  = CHoCH to bearish
+
+if bull_bos
+    prevBullishStruct := true
+if bear_bos
+    prevBullishStruct := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6.5 — LIQUIDITY SWEEP (Jebakan)
+// ═══════════════════════════════════════════════════════════
+var bool bear_sweep = false
+var bool bull_sweep = false
+var int bars_since_bear_sweep = na
+var int bars_since_bull_sweep = na
+
+if show_smc and show_sweep
+    // Bearish Sweep: Harga menembus puncak sebelumnya tapi ditutup di bawahnya
+    bear_sweep := not na(lastSwingHigh) and high > lastSwingHigh and close < lastSwingHigh and open < lastSwingHigh
+    
+    // Bullish Sweep: Harga menembus lembah sebelumnya tapi ditutup di atasnya
+    bull_sweep := not na(lastSwingLow) and low < lastSwingLow and close > lastSwingLow and open > lastSwingLow
+
+    if bear_sweep and is_adv
+        label.new(bar_index, high, "🧹 Jebakan!", color=color.new(color.red, 100), textcolor=color.red, style=label.style_label_down, size=size.small)
+        bars_since_bear_sweep := 0
+    else if not na(bars_since_bear_sweep)
+        bars_since_bear_sweep += 1
+
+    if bull_sweep and is_adv
+        label.new(bar_index, low, "🧹 Jebakan!", color=color.new(color.green, 100), textcolor=color.green, style=label.style_label_up, size=size.small)
+        bars_since_bull_sweep := 0
+    else if not na(bars_since_bull_sweep)
+        bars_since_bull_sweep += 1
+
+// ═══ [FITUR BARU] Displacement Candle Detector ═══
+float candle_body = math.abs(close - open)
+bool is_large_body = candle_body > 1.5 * atr14
+    
+bool is_disp_bull = close > open and is_large_body and not na(bars_since_bull_sweep) and bars_since_bull_sweep <= 5
+bool is_disp_bear = close < open and is_large_body and not na(bars_since_bear_sweep) and bars_since_bear_sweep <= 5
+    
+if show_displacement and is_adv
+    if is_disp_bull
+        label.new(bar_index, low, "DISP", color=color.new(color.green, 50), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    if is_disp_bear
+        label.new(bar_index, high, "DISP", color=color.new(color.red, 50), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6.6 — AUTO FIBONACCI OTE (Golden Zone)
+// ═══════════════════════════════════════════════════════════
+var box oteBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.orange, 85), border_color=color.new(color.orange, 50), border_style=line.style_dashed)
+var label oteLbl = label.new(na, na, "✨ OTE Golden Zone", xloc=xloc.bar_index, style=label.style_none, textcolor=color.orange, size=size.small)
+
+var float ote_top = na
+var float ote_bot = na
+
+if show_smc and show_pd and is_adv
+    // Menggunakan rentang 100 candle terakhir untuk mencari Swing utama
+    hh_100 = ta.highest(high, 100)
+    ll_100 = ta.lowest(low, 100)
+    
+    // Menentukan Tren: Jarak ke HH atau LL terdekat
+    bars_since_hh = ta.barssince(high == hh_100)
+    bars_since_ll = ta.barssince(low == ll_100)
+    
+    // Jika LL terjadi setelah HH (Tren Turun), tarik Fibo dari HH ke LL (Mencari retracement naik)
+    if bars_since_hh > bars_since_ll
+        ote_top := hh_100 - (hh_100 - ll_100) * 0.618
+        ote_bot := hh_100 - (hh_100 - ll_100) * 0.786
+    // Jika HH terjadi setelah LL (Tren Naik), tarik Fibo dari LL ke HH (Mencari retracement turun)
+    else
+        ote_bot := ll_100 + (hh_100 - ll_100) * 0.618
+        ote_top := ll_100 + (hh_100 - ll_100) * 0.786
+        
+    int origin_offset = nz(math.max(bars_since_hh, bars_since_ll), 0)
+    int origin_bar = bar_index - origin_offset
+    box.set_lefttop(oteBox, origin_bar, ote_top)
+    box.set_rightbottom(oteBox, bar_index + 10, ote_bot)
+    label.set_xy(oteLbl, bar_index + 2, (ote_top + ote_bot) / 2)
+else
+    box.set_lefttop(oteBox, na, na)
+    box.set_rightbottom(oteBox, na, na)
+    label.set_xy(oteLbl, na, na)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6.8 — JUDAS SWING (Ayunan Tipuan)
+// ═══════════════════════════════════════════════════════════
+var bool judas_bull = false
+var bool judas_bear = false
+if show_smc and show_sweep
+    // Judas Swing sering ditandai dengan Sweep + Lonjakan Volume ekstrem
+    if bear_sweep and is_vol_spike
+        judas_bear := true
+        label.new(bar_index, high, "⚠️ Tipuan Sesi", color=color.new(color.red, 100), textcolor=color.orange, style=label.style_label_down, size=size.small)
+    if bull_sweep and is_vol_spike
+        judas_bull := true
+        label.new(bar_index, low, "⚠️ Tipuan Sesi", color=color.new(color.green, 100), textcolor=color.orange, style=label.style_label_up, size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 7 — WINRATE TRACKER
+// ═══════════════════════════════════════════════════════════
+// [FIX #3] Setiap var declaration harus di baris terpisah
+var int total_signals   = 0
+var int total_wins      = 0
+var int gartley_total   = 0
+var int gartley_win     = 0
+var int bat_total       = 0
+var int bat_win         = 0
+var int butterfly_total = 0
+var int butterfly_win   = 0
+var int crab_total      = 0
+var int crab_win        = 0
+var int shark_total     = 0
+var int shark_win       = 0
+var int cypher_total    = 0
+var int cypher_win      = 0
+
+var float  track_tp      = na
+var float  track_sl      = na
+var bool   track_active  = false
+var bool   track_bearish = false
+var string track_pattern = ""
+
+// [FIX #2] f_addWin() dihapus karena function tidak bisa modify global variable.
+// Logikanya di-inline langsung di bawah.
+
+if track_active
+    if track_bearish
+        if low <= track_tp
+            // [FIX #2] Inline win tracking — menggantikan f_addWin()
+            total_wins += 1
+            if track_pattern == "Gartley"
+                gartley_win += 1
+            else if track_pattern == "Bat"
+                bat_win += 1
+            else if track_pattern == "Butterfly"
+                butterfly_win += 1
+            else if track_pattern == "Crab"
+                crab_win += 1
+            else if track_pattern == "Shark"
+                shark_win += 1
+            else if track_pattern == "Cypher"
+                cypher_win += 1
+            track_active := false
+        else if high >= track_sl
+            track_active := false
+    else
+        if high >= track_tp
+            // [FIX #2] Inline win tracking — menggantikan f_addWin()
+            total_wins += 1
+            if track_pattern == "Gartley"
+                gartley_win += 1
+            else if track_pattern == "Bat"
+                bat_win += 1
+            else if track_pattern == "Butterfly"
+                butterfly_win += 1
+            else if track_pattern == "Crab"
+                crab_win += 1
+            else if track_pattern == "Shark"
+                shark_win += 1
+            else if track_pattern == "Cypher"
+                cypher_win += 1
+            track_active := false
+        else if low <= track_sl
+            track_active := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 8 — STATE VARIABLES
+// ═══════════════════════════════════════════════════════════
+var bool   isAreaActive  = false
+var float  zoneTop       = na
+var float  zoneBot       = na
+var string patternName   = "Unconfirmed"
+var color  patternCol    = color.gray
+var float  saved_tp      = na
+var float  saved_sl      = na
+var int    signal_score  = 0
+// [FIX #7] Variabel untuk mencatat bar saat zone dibuat
+var int    zone_created_bar = na
+var float  pattern_offset   = 0.0
+var int    entry_bar        = na
+var bool   state_isBearish  = false
+var float  highest_since_entry = na
+var float  lowest_since_entry  = na
+
+// [FIX #7] Mitigasi area — nonaktifkan saat TP atau SL tersentuh
+if isAreaActive and not na(saved_tp) and not na(saved_sl)
+    if use_partial_tp
+        float tp1_val = saved_sl + ((saved_tp - saved_sl) * 0.5) // Di tengah-tengah SL dan TP akhir
+        strategy.exit("TP1_Exit", qty_percent=50, limit=tp1_val, stop=saved_sl)
+        strategy.exit("TP2_Exit", limit=saved_tp, stop=saved_sl)
+    else
+        strategy.exit("Exit_Trade", limit=saved_tp, stop=saved_sl)
+    if bar_index > zone_created_bar
+        bool is_bearish_zone = saved_tp < saved_sl
+        
+        // ── Pengawal Keuntungan (Trailing Stop) ──
+        if use_trailing
+            if is_bearish_zone
+                lowest_since_entry := na(lowest_since_entry) ? low : math.min(lowest_since_entry, low)
+                float new_sl = lowest_since_entry + (atr14 * 1.5)
+                if new_sl < saved_sl
+                    saved_sl := new_sl
+            else
+                highest_since_entry := na(highest_since_entry) ? high : math.max(highest_since_entry, high)
+                float new_sl = highest_since_entry - (atr14 * 1.5)
+                if new_sl > saved_sl
+                    saved_sl := new_sl
+
+        if is_bearish_zone
+            if high >= saved_sl or low <= saved_tp
+                isAreaActive := false
+                patternName := "Mitigasi (Selesai)"
+                patternCol := color.gray
+                highest_since_entry := na
+                lowest_since_entry := na
+        else
+            if low <= saved_sl or high >= saved_tp
+                isAreaActive := false
+                patternName := "Mitigasi (Selesai)"
+                patternCol := color.gray
+                highest_since_entry := na
+                lowest_since_entry := na
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 8.5 — TRADING SESSIONS (KILLZONES) & MTF
+// ═══════════════════════════════════════════════════════════
+// -- MTF Trend --
+mtf_m15_ema = request.security(syminfo.tickerid, "15", ta.ema(close, 50), lookahead=barmerge.lookahead_off, gaps=barmerge.gaps_off)
+mtf_h1_ema  = request.security(syminfo.tickerid, "60",  ta.ema(close, 50), lookahead=barmerge.lookahead_off, gaps=barmerge.gaps_off)
+mtf_h4_ema  = request.security(syminfo.tickerid, "240", ta.ema(close, 50), lookahead=barmerge.lookahead_off, gaps=barmerge.gaps_off)
+
+h1_trend_up = not na(mtf_h1_ema) and close > mtf_h1_ema
+h4_trend_up = not na(mtf_h4_ema) and close > mtf_h4_ema
+
+h1_trend_down = not na(mtf_h1_ema) and close < mtf_h1_ema
+h4_trend_down = not na(mtf_h4_ema) and close < mtf_h4_ema
+
+bool is_m15_bull = not na(mtf_m15_ema) and close > mtf_m15_ema
+bool is_m15_bear = not na(mtf_m15_ema) and close < mtf_m15_ema
+bool m15_pass_bull = not use_m15_filter or is_m15_bull
+bool m15_pass_bear = not use_m15_filter or is_m15_bear
+
+// ═══ [V4.1] WEEKLY/DAILY MACRO BIAS FILTER ═══
+float ema50_daily  = request.security(syminfo.tickerid, "D", ta.ema(close, 50))
+float ema50_weekly = request.security(syminfo.tickerid, "W", ta.ema(close, 50))
+bool macro_bull = close > ema50_daily and close > ema50_weekly
+bool macro_bear = close < ema50_daily and close < ema50_weekly
+bool macro_pass_bull = not use_macro_filter or macro_bull
+bool macro_pass_bear = not use_macro_filter or macro_bear
+
+// -- Trading Sessions --
+in_asian  = time(timeframe.period, asian_time,  tz)
+in_london = time(timeframe.period, london_time, tz)
+in_ny     = time(timeframe.period, ny_time,     tz)
+bool is_killzone_active = (not na(in_london)) or (not na(in_ny))
+
+// -- PDH / PDL --
+pdh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+
+// -- VWAP --
+vwap_val = ta.vwap(hlc3)
+vwap_above = close > vwap_val
+
+// -- Volatility Speedometer --
+atr_now = ta.atr(14)
+atr_avg = ta.sma(atr_now, 20)
+vol_ratio_atr = atr_now / atr_avg
+v_status = vol_ratio_atr > 1.5 ? "🔥 PANAS" : vol_ratio_atr >= 0.8 ? "⚡ NORMAL" : "🥶 DINGIN"
+v_color  = vol_ratio_atr > 1.5 ? color.red : vol_ratio_atr >= 0.8 ? color.yellow : color.aqua
+
+// ═══ [V4.1] SPREAD FILTER ═══
+// Menggunakan range (high - low) sebagai proxy spread karena ta.spread tidak tersedia
+float current_spread = high - low
+float avg_spread     = ta.sma(current_spread, 100)
+bool  spread_ok      = use_h4_filter ? (not use_spread_filter or (current_spread <= avg_spread * max_spread_multiplier) or is_disp_bull or is_disp_bear) : true
+
+// -- Candle Pattern Detection --
+// (candle_body sudah dihitung di atas pada blok Displacement)
+candle_range  = high - low
+candle_upper  = high - math.max(close, open)
+candle_lower  = math.min(close, open) - low
+
+is_pin_bar_bull = candle_lower > candle_body * 2 and candle_upper < candle_body
+is_pin_bar_bear = candle_upper > candle_body * 2 and candle_lower < candle_body
+is_engulf_bull  = close > open and close > open[1] and open < close[1] and open[1] > close[1]
+is_engulf_bear  = close < open and close < open[1] and open > close[1] and open[1] < close[1]
+is_doji         = candle_body <= candle_range * 0.1
+
+// ═══ [V4.1] CANDLE KONFIRMASI (Point D Harmonic) ═══
+bool pin_bar_bull_conf = close > open and (open - low) > 2 * math.abs(close - open)
+bool engulf_bull_conf  = close > open and close > high[1] and open < low[1]
+bool pin_bar_bear_conf = close < open and (high - open) > 2 * math.abs(close - open)
+bool engulf_bear_conf  = close < open and close < low[1]  and open > high[1]
+
+bool candle_confirm_bull = (pin_bar_bull_conf or engulf_bull_conf) and barstate.isconfirmed
+bool candle_confirm_bear = (pin_bar_bear_conf or engulf_bear_conf) and barstate.isconfirmed
+
+bool conf_pass_bull = not use_candle_confirm or candle_confirm_bull
+bool conf_pass_bear = not use_candle_confirm or candle_confirm_bear
+
+candle_patt_txt = is_engulf_bull ? "🔄 Engulfing Naik" : is_engulf_bear ? "🔄 Engulfing Turun" : is_pin_bar_bull ? "📌 Pin Bar Naik" : is_pin_bar_bear ? "📌 Pin Bar Turun" : is_doji ? "⚠️ Doji (Ragu)" : ""
+candle_patt_col = (is_engulf_bull or is_pin_bar_bull) ? color.lime : (is_engulf_bear or is_pin_bar_bear) ? color.red : color.orange
+
+// -- Fair Value Gap Status (menggunakan data FVG yg sudah ada) --
+string fvg_txt = not na(fvg_bull_bar) ? "Ada (Bullish) ▲" : not na(fvg_bear_bar) ? "Ada (Bearish) ▼" : "Kosong"
+color  fvg_col = not na(fvg_bull_bar) ? color.lime : not na(fvg_bear_bar) ? color.red : color.gray
+
+// -- Liquidity Sweep Status (menggunakan data sweep yg sudah ada) --
+string liq_sweep_txt = bull_sweep ? "Sapuan Bawah ▲" : bear_sweep ? "Sapuan Atas ▼" : "Tidak Ada"
+color  liq_sweep_col = bull_sweep ? color.lime : bear_sweep ? color.red : color.gray
+
+// -- Daily POC (High Volume Node) --
+var float daily_poc    = na
+var float max_daily_vol = 0.0
+
+if ta.change(time("D"))
+    max_daily_vol := 0.0
+    daily_poc := na
+
+if volume > max_daily_vol
+    max_daily_vol := volume
+    daily_poc := hlc3
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 9 — VISUAL OBJECTS
+// ═══════════════════════════════════════════════════════════
+
+// XABCD Labels
+var label lblX = label.new(na, na, "X", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblA = label.new(na, na, "A", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblB = label.new(na, na, "B", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblC = label.new(na, na, "C", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblD = label.new(na, na, "D", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+
+// XABCD Lines (ZigZag)
+var line lineXA = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineAB = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineBC = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineCD = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+
+// Zone, TP, SL
+var box   zoneBox  = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.gray,100), border_color=color.new(color.gray,100))
+var line  lineTP   = line.new(na, na, na, na, xloc=xloc.bar_index, style=line.style_dashed, width=2, color=color.green)
+var line  lineSL   = line.new(na, na, na, na, xloc=xloc.bar_index, style=line.style_dashed, width=2, color=color.red)
+var line  lineArrow= line.new(na, na, na, na, xloc=xloc.bar_index, style=line.style_arrow_right, width=4)
+var label lblPatt  = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_label_down, size=size.normal)
+var label txtEntry = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.small)
+
+
+// SMC: Order Block Boxes
+var box obBullBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.green, 80), border_color=color.new(color.green, 40), border_width=1)
+var box obBearBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.red,   80), border_color=color.new(color.red,   40), border_width=1)
+
+// BB: Breaker Block Boxes
+var box bbBullBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.teal, 80), border_color=color.new(color.teal, 40), border_width=1)
+var box bbBearBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.maroon, 80), border_color=color.new(color.maroon, 40), border_width=1)
+
+// FVG: Area Kosong Boxes
+var box fvgBullBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.blue, 85), border_color=color.new(color.blue, 60), border_width=1)
+var box fvgBearBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.orange, 85), border_color=color.new(color.orange, 60), border_width=1)
+
+// SMC: BOS / CHoCH
+var line  lineBOS = line.new(na, na, na, na, xloc=xloc.bar_index, width=1, style=line.style_dotted)
+var label lblBOS  = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.tiny)
+
+// VWAP Line
+var line lineVWAP = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.yellow, width=2, style=line.style_dashed)
+var label lblVWAP = label.new(na, na, "VWAP", xloc=xloc.bar_index, style=label.style_none, textcolor=color.yellow, size=size.tiny)
+
+// PDH / PDL Lines
+var line linePDH = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.new(color.red, 40), width=1, style=line.style_dotted)
+var line linePDL = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.new(color.green, 40), width=1, style=line.style_dotted)
+var label lblPDH = label.new(na, na, "", xloc=xloc.bar_index, style=label.style_none, textcolor=color.new(color.red, 20), size=size.tiny)
+var label lblPDL = label.new(na, na, "", xloc=xloc.bar_index, style=label.style_none, textcolor=color.new(color.green, 20), size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 10 — TABLES
+// ═══════════════════════════════════════════════════════════
+var table fibTable = table.new(position.top_right,    3, 8,  bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+var table winTable = table.new(position.top_left,     3, 14,  bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+var table smcTable = table.new(position.bottom_right, 2, 18, bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 11 — BOS / CHoCH VISUAL (independen)
+// ═══════════════════════════════════════════════════════════
+// [FIX #6] Nama variabel CHoCH sudah diperbaiki, referensi visual disesuaikan
+if show_smc and show_bos and is_adv
+    if bull_bos or choch_bull
+        bos_label = choch_bull ? "Ganti Naik ▲" : "Lanjut Naik ▲"
+        bos_c     = choch_bull ? color.orange : color.lime
+        bos_level = not na(lastSwingHigh) ? lastSwingHigh : close
+        line.set_xy1(lineBOS, bar_index - 1, bos_level)
+        line.set_xy2(lineBOS, bar_index,     bos_level)
+        line.set_color(lineBOS, bos_c)
+        label.set_xy(lblBOS, bar_index, bos_level)
+        label.set_text(lblBOS, bos_label)
+        label.set_textcolor(lblBOS, bos_c)
+    else if bear_bos or choch_bear
+        bos_label = choch_bear ? "Ganti Turun ▼" : "Lanjut Turun ▼"
+        bos_c     = choch_bear ? color.orange : color.red
+        bos_level = not na(lastSwingLow) ? lastSwingLow : close
+        line.set_xy1(lineBOS, bar_index - 1, bos_level)
+        line.set_xy2(lineBOS, bar_index,     bos_level)
+        line.set_color(lineBOS, bos_c)
+        label.set_xy(lblBOS, bar_index, bos_level)
+        label.set_text(lblBOS, bos_label)
+        label.set_textcolor(lblBOS, bos_c)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 11.5 — SESSION KILLZONES
+// ═══════════════════════════════════════════════════════════
+in_asian_bg  = time(timeframe.period, asian_time,  tz)
+in_london_bg = time(timeframe.period, london_time, tz)
+in_ny_bg     = time(timeframe.period, ny_time,     tz)
+
+bgcolor(show_sessions and not na(in_asian_bg)  ? color.new(color.blue,  93) : na, title="Asian Session")
+bgcolor(show_sessions and not na(in_london_bg) ? color.new(color.red,   93) : na, title="London Session")
+bgcolor(show_sessions and not na(in_ny_bg)     ? color.new(color.green, 93) : na, title="NY Session")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 12 — ORDER BLOCK & FVG VISUAL (independen)
+// ═══════════════════════════════════════════════════════════
+if show_smc and show_ob and is_adv
+    if not na(ob_bull_bar)
+        box.set_lefttop(obBullBox,     ob_bull_bar, ob_bull_top)
+        box.set_rightbottom(obBullBox, bar_index,   ob_bull_bot)
+    else
+        box.set_lefttop(obBullBox,     na, na)
+        box.set_rightbottom(obBullBox, na, na)
+
+    if not na(ob_bear_bar)
+        box.set_lefttop(obBearBox,     ob_bear_bar, ob_bear_top)
+        box.set_rightbottom(obBearBox, bar_index,   ob_bear_bot)
+    else
+        box.set_lefttop(obBearBox,     na, na)
+        box.set_rightbottom(obBearBox, na, na)
+
+    if not na(bb_bull_bar)
+        box.set_lefttop(bbBullBox,     bb_bull_bar, bb_bull_top)
+        box.set_rightbottom(bbBullBox, bar_index,   bb_bull_bot)
+    else
+        box.set_lefttop(bbBullBox,     na, na)
+        box.set_rightbottom(bbBullBox, na, na)
+
+    if not na(bb_bear_bar)
+        box.set_lefttop(bbBearBox,     bb_bear_bar, bb_bear_top)
+        box.set_rightbottom(bbBearBox, bar_index,   bb_bear_bot)
+    else
+        box.set_lefttop(bbBearBox,     na, na)
+        box.set_rightbottom(bbBearBox, na, na)
+
+if show_smc and show_fvg and is_adv
+    if not na(fvg_bull_bar)
+        box.set_lefttop(fvgBullBox,     fvg_bull_bar, fvg_bull_top)
+        box.set_rightbottom(fvgBullBox, bar_index,    fvg_bull_bot)
+        box.set_bgcolor(fvgBullBox, fvg_bull_strong and show_fvg_strength ? color.new(color.blue, 50) : color.new(color.blue, 85))
+    else
+        box.set_lefttop(fvgBullBox,     na, na)
+        box.set_rightbottom(fvgBullBox, na, na)
+
+    if not na(fvg_bear_bar)
+        box.set_lefttop(fvgBearBox,     fvg_bear_bar, fvg_bear_top)
+        box.set_rightbottom(fvgBearBox, bar_index,    fvg_bear_bot)
+        box.set_bgcolor(fvgBearBox, fvg_bear_strong and show_fvg_strength ? color.new(color.orange, 50) : color.new(color.orange, 85))
+    else
+        box.set_lefttop(fvgBearBox,     na, na)
+        box.set_rightbottom(fvgBearBox, na, na)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 13 — PIVOT VALUES
+// ═══════════════════════════════════════════════════════════
+X      = array.get(p_vals,  4)
+X_b    = array.get(p_bars,  4)
+X_type = array.get(p_types, 4)
+A      = array.get(p_vals,  3)
+A_b    = array.get(p_bars,  3)
+A_type = array.get(p_types, 3)
+B      = array.get(p_vals,  2)
+B_b    = array.get(p_bars,  2)
+B_type = array.get(p_types, 2)
+C      = array.get(p_vals,  1)
+C_b    = array.get(p_bars,  1)
+C_type = array.get(p_types, 1)
+D      = array.get(p_vals,  0)
+D_b    = array.get(p_bars,  0)
+D_type = array.get(p_types, 0)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 14 — MAIN HARMONIC LOGIC
+// ═══════════════════════════════════════════════════════════
+bool filter_pass_bull = not is_on_tilt and spread_ok
+bool filter_pass_bear = not is_on_tilt and spread_ok
+
+allValid   = not na(X) and not na(A) and not na(B) and not na(C) and not na(D)
+orderValid = allValid and (X_b < A_b) and (A_b < B_b) and (B_b < C_b) and (C_b < D_b)
+altValid   = orderValid and (X_type != A_type) and (A_type != B_type) and (B_type != C_type) and (C_type != D_type)
+
+if altValid
+    // [FIX #5] Gunakan atr14 yang sudah dihitung di global scope (Section 5)
+    // [FIX #8] offset dipindah ke pattern_offset agar label tidak loncat-loncat setiap bar
+    isBearish = (D_type == 1)
+
+    xa  = math.abs(X - A)
+    ab  = math.abs(A - B)
+    bc  = math.abs(B - C)
+    cd  = math.abs(C - D)
+    xd  = math.abs(X - D)
+
+    xab = xa == 0 ? 0.0 : ab / xa
+    abc = ab == 0 ? 0.0 : bc / ab
+    bcd = bc == 0 ? 0.0 : cd / bc
+
+    xad = xa == 0 ? 0.0 : xd / xa
+
+
+    // ── Deteksi Pola ──────────────────────────
+    string detectedName    = ""
+    string detectedPattern = ""
+
+    if show_gartley and isGartley(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Gartley" : "Bullish Gartley"
+        detectedPattern := "Gartley"
+    else if show_bat and isBat(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Bat" : "Bullish Bat"
+        detectedPattern := "Bat"
+    else if show_butterfly and isButterfly(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Butterfly" : "Bullish Butterfly"
+        detectedPattern := "Butterfly"
+    else if show_crab and isCrab(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Crab" : "Bullish Crab"
+        detectedPattern := "Crab"
+    else if show_shark and isShark(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Shark" : "Bullish Shark"
+        detectedPattern := "Shark"
+    else if show_cypher and isCypher(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Cypher" : "Bullish Cypher"
+        detectedPattern := "Cypher"
+    else
+        detectedName    := isBearish ? "Turun (Belum Valid)" : "Naik (Belum Valid)"
+        detectedPattern := ""
+
+    // ── Deteksi Warna ─────────────────────────
+    color detectedCol = color.gray
+    if show_gartley and isGartley(xab, abc, bcd, xad)
+        detectedCol := col_gartley
+    else if show_bat and isBat(xab, abc, bcd, xad)
+        detectedCol := col_bat
+    else if show_butterfly and isButterfly(xab, abc, bcd, xad)
+        detectedCol := col_butterfly
+    else if show_crab and isCrab(xab, abc, bcd, xad)
+        detectedCol := col_crab
+    else if show_shark and isShark(xab, abc, bcd, xad)
+        detectedCol := col_shark
+    else if show_cypher and isCypher(xab, abc, bcd, xad)
+        detectedCol := col_cypher
+
+    // ── Update State saat D baru ──────────────
+    if D != D[1] or D_b != D_b[1]
+        patternName  := detectedName
+        patternCol   := detectedCol
+        isAreaActive := detectedPattern != "" and (isBearish ? filter_pass_bear : filter_pass_bull)
+        pattern_offset := atr14 * 0.5
+        // [FIX #7] Catat bar saat zone dibuat
+        zone_created_bar := bar_index
+        entry_bar := D_b
+        state_isBearish := isBearish
+        highest_since_entry := na
+        lowest_since_entry := na
+        zoneTop      := D * (1 + zone_buffer)
+        zoneBot      := D * (1 - zone_buffer)
+
+        // TP/SL Scalping: lebih ketat dari swing trading
+        // TP = 0.382 dari CD | SL = 0.20 dari AD
+        saved_tp := isBearish ? D - cd * 0.382 : D + cd * 0.382
+        saved_sl := isBearish ? D + math.abs(A - D) * 0.20 : D - math.abs(A - D) * 0.20
+
+        // ── Signal Score Calculation (max 5) ───
+        // (Legacy skor dihapus, diganti V4.0 Confluence Grade System)
+        
+        // ═══ [FITUR BARU] Confluence Grade System ═══
+        int conf_score = 0
+        if isBearish and not na(ob_bear_top) and D >= ob_bear_bot and D <= ob_bear_top
+            conf_score += 1
+        else if not isBearish and not na(ob_bull_top) and D >= ob_bull_bot and D <= ob_bull_top
+            conf_score += 1
+            
+        if isBearish and not na(fvg_bear_bar)
+            conf_score += fvg_bear_strong ? 2 : 1
+        else if not isBearish and not na(fvg_bull_bar)
+            conf_score += fvg_bull_strong ? 2 : 1
+            
+        if isBearish and bear_sweep
+            conf_score += 1
+        else if not isBearish and bull_sweep
+            conf_score += 1
+            
+        if isBearish and is_disp_bear
+            conf_score += 1
+        else if not isBearish and is_disp_bull
+            conf_score += 1
+            
+        if isBearish and not h1_trend_up and not h4_trend_up
+            conf_score += 1
+        else if not isBearish and h1_trend_up and h4_trend_up
+            conf_score += 1
+            
+        if is_killzone_active
+            conf_score += 1
+            
+        string conf_grade = conf_score >= 5 ? "A" : conf_score >= 3 ? "B" : "C"
+        signal_score := conf_score // Save to global state if needed
+        
+        bool grade_pass = false
+        if min_grade_to_show == "C"
+            grade_pass := true
+        else if min_grade_to_show == "B" and (conf_grade == "A" or conf_grade == "B")
+            grade_pass := true
+        else if min_grade_to_show == "A" and conf_grade == "A"
+            grade_pass := true
+            
+        bool killzone_pass = not strict_killzone or is_killzone_active
+        if not grade_pass or (isBearish and (not filter_pass_bear or not conf_pass_bear)) or (not isBearish and (not filter_pass_bull or not conf_pass_bull)) or not killzone_pass or is_daily_locked
+            detectedPattern := ""
+            isAreaActive := false
+
+        // [FITUR BARU] Notifikasi Alert + Info Skor + Lot (V4.0)
+        if detectedPattern != ""
+            string action_type = isBearish ? "SELL" : "BUY"
+            string str_skor = conf_grade == "A" ? "GRADE A (DEWA)" : conf_grade == "B" ? "GRADE B (KUAT)" : "GRADE C (LEMAH)"
+            
+            // ═══ [FITUR BARU] Position Size Calculator ═══
+            float risk_amount   = (risk_per_trade_pct / 100) * account_size
+            float sl_distance   = math.abs(D - saved_sl)
+            float position_size = is_crypto ? (risk_amount / sl_distance) : (risk_amount / ((sl_distance / syminfo.mintick / 10) * 10))
+            string lot_lbl      = is_crypto ? "Qty: " : "Lot: "
+            string str_lot      = show_position_size ? ("\n" + lot_lbl + str.tostring(position_size, is_crypto ? "#.####" : "#.##") + unit_str) : ""
+            
+            string json_alert = "{\"coin\": \"" + syminfo.ticker + "\", \"action\": \"" + action_type + "\", \"entry\": \"" + str.tostring(D) + "\", \"tp\": \"" + str.tostring(saved_tp) + "\", \"sl\": \"" + str.tostring(saved_sl) + "\"}"
+            string normal_alert = "Sinyal Scalping!\nArah: " + action_type + " | " + str_skor + " (" + str.tostring(conf_score) + "/6)\nPola: " + detectedPattern + "\nEntry: " + str.tostring(D, "#.####") + "\nTP: " + str.tostring(saved_tp, "#.####") + "\nSL: " + str.tostring(saved_sl, "#.####") + str_lot
+            
+            string alertMsg = use_webhook ? json_alert : normal_alert
+            if is_overlap and not use_webhook
+                alertMsg := "⚠️ AWAS AREA BERTUMPUK (SIDEWAYS) - JANGAN ENTRY DULU!\n\n" + alertMsg
+            
+            if not is_on_tilt
+                alert(alertMsg, alert.freq_once_per_bar_close)
+                if isBearish
+                    strategy.entry("Harmonic_Sell", strategy.short)
+                else
+                    strategy.entry("Harmonic_Buy", strategy.long)
+
+        // ── Statistik ─────────────────────────
+        if detectedPattern != "" and in_date_range
+            total_signals += 1
+            if detectedPattern == "Gartley"
+                gartley_total += 1
+            else if detectedPattern == "Bat"
+                bat_total += 1
+            else if detectedPattern == "Butterfly"
+                butterfly_total += 1
+            else if detectedPattern == "Crab"
+                crab_total += 1
+            else if detectedPattern == "Shark"
+                shark_total += 1
+            else if detectedPattern == "Cypher"
+                cypher_total += 1
+
+            track_tp      := saved_tp
+            track_sl      := saved_sl
+            track_active  := true
+            track_bearish := isBearish
+            track_pattern := detectedPattern
+
+    // ═══════════════════════════════════════════════════════════
+    // SECTION 14.5 — SMC STANDALONE ENTRY
+    // ═══════════════════════════════════════════════════════════
+    bool hit_ob_bull = not na(ob_bull_top) and low <= ob_bull_top and close >= ob_bull_bot
+    bool hit_bb_bull = not na(bb_bull_top) and low <= bb_bull_top and close >= bb_bull_bot
+    
+    bool hit_ob_bear = not na(ob_bear_bot) and high >= ob_bear_bot and close <= ob_bear_top
+    bool hit_bb_bear = not na(bb_bear_bot) and high >= bb_bear_bot and close <= bb_bear_top
+
+    // --- IMPROVEMENT 1 & 2: Candle Confirmation & Volume in Zone ---
+    bool price_in_bull_zone = close >= (hit_ob_bull ? ob_bull_bot : bb_bull_bot) and close <= (hit_ob_bull ? ob_bull_top : bb_bull_top)
+    bool price_in_bear_zone = close >= (hit_ob_bear ? ob_bear_bot : bb_bear_bot) and close <= (hit_ob_bear ? ob_bear_top : bb_bear_top)
+    bool vol_confirm = volume > vol_ma * 1.2
+    
+    bool bull_confirm_in_zone = price_in_bull_zone and (pin_bar_bull_conf or engulf_bull_conf) and vol_confirm and barstate.isconfirmed
+    bool bear_confirm_in_zone = price_in_bear_zone and (pin_bar_bear_conf or engulf_bear_conf) and vol_confirm and barstate.isconfirmed
+
+    // Visual Konfirmasi Candle dalam Zone
+
+    if not isAreaActive and show_smc and show_ob
+
+        // Cek Sinyal Buy (Harga menyentuh Lantai Support atau Eks-Atap)
+        if (hit_ob_bull or hit_bb_bull) and filter_pass_bull and bull_confirm_in_zone
+            isAreaActive := true
+            zoneTop := hit_ob_bull ? ob_bull_top : bb_bull_top
+            zoneBot := hit_ob_bull ? ob_bull_bot : bb_bull_bot
+            saved_sl := zoneBot - (atr14 * 1.5)
+            float potential_tp = not na(lastSwingHigh) ? lastSwingHigh : (not na(ob_bear_bot) ? ob_bear_bot : zoneTop + (zoneTop - saved_sl) * 1.5)
+            if potential_tp < zoneTop + (zoneTop - saved_sl) * 0.5
+                potential_tp := zoneTop + (zoneTop - saved_sl) * 1.5
+            saved_tp := potential_tp
+            patternName := hit_ob_bull ? "SMC Buy (Lantai)" : "SMC Buy (Eks-Atap)"
+            patternCol := color.green
+            entry_bar := bar_index
+            zone_created_bar := bar_index
+            state_isBearish := false
+            highest_since_entry := na
+            lowest_since_entry := na
+            // ═══ [FITUR BARU] Confluence Grade System (SMC) ═══
+            int conf_score = 1 // 1 point for OB
+            if not na(fvg_bull_bar)
+                conf_score += 1
+            if bull_sweep
+                conf_score += 1
+            if is_disp_bull
+                conf_score += 1
+            if h1_trend_up and h4_trend_up
+                conf_score += 1
+            if is_killzone_active
+                conf_score += 1
+                
+            string conf_grade = conf_score >= 5 ? "A" : conf_score >= 3 ? "B" : "C"
+            signal_score := conf_score
+            
+            bool grade_pass = false
+            if min_grade_to_show == "C"
+                grade_pass := true
+            else if min_grade_to_show == "B" and (conf_grade == "A" or conf_grade == "B")
+                grade_pass := true
+            else if min_grade_to_show == "A" and conf_grade == "A"
+                grade_pass := true
+                
+            bool killzone_pass = not strict_killzone or is_killzone_active
+            if not grade_pass or not filter_pass_bull or not killzone_pass or is_daily_locked
+                isAreaActive := false
+            else
+                // ═══ [FITUR BARU] Position Size Calculator ═══
+                float risk_amount   = (risk_per_trade_pct / 100) * account_size
+                float sl_distance   = math.abs(zoneTop - saved_sl)
+                float position_size = is_crypto ? (risk_amount / sl_distance) : (risk_amount / ((sl_distance / syminfo.mintick / 10) * 10))
+                string lot_lbl      = is_crypto ? "Qty: " : "Lot: "
+                string str_lot      = show_position_size ? ("\n" + lot_lbl + str.tostring(position_size, is_crypto ? "#.####" : "#.##") + unit_str) : ""
+                
+                string json_alert = "{\"coin\": \"" + syminfo.ticker + "\", \"action\": \"BUY\", \"entry\": \"" + str.tostring(zoneTop) + "\", \"tp\": \"" + str.tostring(saved_tp) + "\", \"sl\": \"" + str.tostring(saved_sl) + "\"}"
+                string str_skor = conf_grade == "A" ? "GRADE A (DEWA)" : conf_grade == "B" ? "GRADE B (KUAT)" : "GRADE C (LEMAH)"
+                string normal_alert = "Sinyal SMC Scalping!\nArah: BUY | " + str_skor + "\nPola: " + patternName + "\nEntry: " + str.tostring(zoneTop, "#.####") + "\nTP: " + str.tostring(saved_tp, "#.####") + "\nSL: " + str.tostring(saved_sl, "#.####") + str_lot
+                if not is_on_tilt
+                    alert(use_webhook ? json_alert : normal_alert, alert.freq_once_per_bar_close)
+                    strategy.entry("SMC_Buy", strategy.long)
+
+        // Cek Sinyal Sell (Harga menyentuh Atap Resisten atau Eks-Lantai)
+        else if (hit_ob_bear or hit_bb_bear) and filter_pass_bear and bear_confirm_in_zone
+            isAreaActive := true
+            zoneTop := hit_ob_bear ? ob_bear_top : bb_bear_top
+            zoneBot := hit_ob_bear ? ob_bear_bot : bb_bear_bot
+            saved_sl := zoneTop + (atr14 * 1.5)
+            float potential_tp = not na(lastSwingLow) ? lastSwingLow : (not na(ob_bull_top) ? ob_bull_top : zoneBot - (saved_sl - zoneBot) * 1.5)
+            if potential_tp > zoneBot - (saved_sl - zoneBot) * 0.5
+                potential_tp := zoneBot - (saved_sl - zoneBot) * 1.5
+            saved_tp := potential_tp
+            patternName := hit_ob_bear ? "SMC Sell (Atap)" : "SMC Sell (Eks-Lantai)"
+            patternCol := color.red
+            entry_bar := bar_index
+            zone_created_bar := bar_index
+            state_isBearish := true
+            highest_since_entry := na
+            lowest_since_entry := na
+            // ═══ [FITUR BARU] Confluence Grade System (SMC) ═══
+            int conf_score = 1 // 1 point for OB
+            if not na(fvg_bear_bar)
+                conf_score += 1
+            if bear_sweep
+                conf_score += 1
+            if is_disp_bear
+                conf_score += 1
+            if not h1_trend_up and not h4_trend_up
+                conf_score += 1
+            if is_killzone_active
+                conf_score += 1
+                
+            string conf_grade = conf_score >= 5 ? "A" : conf_score >= 3 ? "B" : "C"
+            signal_score := conf_score
+            
+            bool grade_pass = false
+            if min_grade_to_show == "C"
+                grade_pass := true
+            else if min_grade_to_show == "B" and (conf_grade == "A" or conf_grade == "B")
+                grade_pass := true
+            else if min_grade_to_show == "A" and conf_grade == "A"
+                grade_pass := true
+                
+            bool killzone_pass = not strict_killzone or is_killzone_active
+            if not grade_pass or not filter_pass_bear or not killzone_pass or is_daily_locked
+                isAreaActive := false
+            else
+                // ═══ [FITUR BARU] Position Size Calculator ═══
+                float risk_amount   = (risk_per_trade_pct / 100) * account_size
+                float sl_distance   = math.abs(zoneBot - saved_sl)
+                float position_size = is_crypto ? (risk_amount / sl_distance) : (risk_amount / ((sl_distance / syminfo.mintick / 10) * 10))
+                string lot_lbl      = is_crypto ? "Qty: " : "Lot: "
+                string str_lot      = show_position_size ? ("\n" + lot_lbl + str.tostring(position_size, is_crypto ? "#.####" : "#.##") + unit_str) : ""
+                
+                string json_alert = "{\"coin\": \"" + syminfo.ticker + "\", \"action\": \"SELL\", \"entry\": \"" + str.tostring(zoneBot) + "\", \"tp\": \"" + str.tostring(saved_tp) + "\", \"sl\": \"" + str.tostring(saved_sl) + "\"}"
+                string str_skor = conf_grade == "A" ? "GRADE A (DEWA)" : conf_grade == "B" ? "GRADE B (KUAT)" : "GRADE C (LEMAH)"
+                string normal_alert = "Sinyal SMC Scalping!\nArah: SELL | " + str_skor + "\nPola: " + patternName + "\nEntry: " + str.tostring(zoneBot, "#.####") + "\nTP: " + str.tostring(saved_tp, "#.####") + "\nSL: " + str.tostring(saved_sl, "#.####") + str_lot
+                if not is_on_tilt
+                    alert(use_webhook ? json_alert : normal_alert, alert.freq_once_per_bar_close)
+                    strategy.entry("SMC_Sell", strategy.short)
+
+    box_right = (not na(entry_bar) ? entry_bar : bar_index) + box_width
+
+    // ── Update Labels XABCD ──────────────────
+    label.set_textcolor(lblX, patternCol)
+    label.set_textcolor(lblA, patternCol)
+    label.set_textcolor(lblB, patternCol)
+    label.set_textcolor(lblC, patternCol)
+    label.set_textcolor(lblD, patternCol)
+
+    label.set_xy(lblX, X_b, X_type == 1 ? X + pattern_offset : X - pattern_offset)
+    label.set_xy(lblA, A_b, A_type == 1 ? A + pattern_offset : A - pattern_offset)
+    label.set_xy(lblB, B_b, B_type == 1 ? B + pattern_offset : B - pattern_offset)
+    label.set_xy(lblC, C_b, C_type == 1 ? C + pattern_offset : C - pattern_offset)
+    label.set_xy(lblD, D_b, D_type == 1 ? D + pattern_offset : D - pattern_offset)
+
+    // ── Update Garis ZigZag ──────────────────
+    line.set_xy1(lineXA, X_b, X)
+    line.set_xy2(lineXA, A_b, A)
+    line.set_color(lineXA, patternCol)
+    line.set_xy1(lineAB, A_b, A)
+    line.set_xy2(lineAB, B_b, B)
+    line.set_color(lineAB, patternCol)
+    line.set_xy1(lineBC, B_b, B)
+    line.set_xy2(lineBC, C_b, C)
+    line.set_color(lineBC, patternCol)
+    line.set_xy1(lineCD, C_b, C)
+    line.set_xy2(lineCD, D_b, D)
+    line.set_color(lineCD, patternCol)
+
+    // ── Final Filter Guard ──
+    if isAreaActive
+        if state_isBearish and not filter_pass_bear
+            isAreaActive := false
+        else if not state_isBearish and not filter_pass_bull
+            isAreaActive := false
+
+    // ── Render Area Aktif ────────────────────
+    if isAreaActive
+        // Zone box
+        box.set_lefttop(zoneBox,     entry_bar,       zoneTop)
+        box.set_rightbottom(zoneBox, box_right,  zoneBot)
+        box.set_bgcolor(zoneBox,     state_isBearish ? color.new(color.red,   60) : color.new(color.green, 60))
+        box.set_border_color(zoneBox,state_isBearish ? color.red : color.green)
+        
+
+
+        // TP Line
+        line.set_color(lineTP, color.green)
+        line.set_xy1(lineTP, entry_bar,       saved_tp)
+        line.set_xy2(lineTP, bar_index + 2, saved_tp)
+
+        // SL Line
+        line.set_color(lineSL, color.red)
+        line.set_xy1(lineSL, entry_bar,       saved_sl)
+        line.set_xy2(lineSL, bar_index + 2, saved_sl)
+
+        // Arah Panah (Arrow) Penunjuk Trend
+        line.set_color(lineArrow, state_isBearish ? color.red : color.green)
+        
+        // Titik awal panah (kiri)
+        float arrow_start_y = state_isBearish ? zoneTop : zoneBot
+        if patternName != "SMC Buy (Lantai)" and patternName != "SMC Sell (Atap)" and patternName != "SMC Buy (Eks-Atap)" and patternName != "SMC Sell (Eks-Lantai)"
+            arrow_start_y := D
+            
+        // Titik ujung panah (kanan) - Menentukan arah atas/bawah
+        float arrow_end_y = state_isBearish ? zoneBot : zoneTop
+        
+        line.set_xy1(lineArrow, entry_bar, arrow_start_y)
+        line.set_xy2(lineArrow, bar_index + 2, arrow_end_y)
+
+        // ── Signal Quality Score + RR Ratio + Lot ──
+        string dir_str   = state_isBearish ? "SELL" : "BUY"
+        float  rr_dist_tp = math.abs(saved_tp - ((zoneTop + zoneBot) / 2))
+        float  rr_dist_sl = math.abs(saved_sl - ((zoneTop + zoneBot) / 2))
+        float  rr_val     = rr_dist_sl > 0 ? rr_dist_tp / rr_dist_sl : 0.0
+        string rr_str     = " | RR 1:" + str.tostring(rr_val, "#.#")
+        string score_txt  = ""
+        
+        if not is_on_tilt
+            string conf_grade_lbl = signal_score >= 5 ? "A" : signal_score >= 3 ? "B" : "C"
+            if conf_grade_lbl == "A"
+                score_txt := "🏆 GRADE A — " + dir_str + rr_str
+            else if conf_grade_lbl == "B"
+                score_txt := "⚡ GRADE B — " + dir_str + rr_str
+            else
+                score_txt := "💤 GRADE C — " + dir_str + rr_str
+                
+            if show_position_size
+                float risk_amt  = (risk_per_trade_pct / 100) * account_size
+                float pos_size  = is_crypto ? (risk_amt / rr_dist_sl) : (risk_amt / ((rr_dist_sl / syminfo.mintick / 10) * 10))
+                string lot_lbl  = is_crypto ? "Qty: " : "Lot: "
+                string price_fmt = is_crypto ? "#.00" : "#.##"
+                string sl_str    = str.tostring(saved_sl, price_fmt)
+                string tp_str    = str.tostring(saved_tp, price_fmt)
+                score_txt := score_txt + "\nSL: " + sl_str + " | TP: " + tp_str + "\n" + lot_lbl + str.tostring(pos_size, is_crypto ? "#.####" : "#.##") + unit_str
+        else
+            score_txt := "🧘 TILT MODE"
+
+        // Pattern label
+        label.set_xy(lblPatt, entry_bar, state_isBearish ? zoneTop + pattern_offset : zoneBot - pattern_offset)
+        label.set_text(lblPatt,  patternName + "\n" + score_txt)
+        label.set_color(lblPatt, patternCol)
+        label.set_textcolor(lblPatt, color.white)
+        label.set_style(lblPatt, state_isBearish ? label.style_label_down : label.style_label_up)
+
+        // Entry, TP, SL text labels
+        label.set_xy(txtEntry, bar_index + 2, arrow_end_y)
+        label.set_text(txtEntry, is_on_tilt ? "" : (state_isBearish ? "SELL" : "BUY"))
+        label.set_color(txtEntry, state_isBearish ? color.new(color.red, 85) : color.new(color.green, 85))
+        label.set_textcolor(txtEntry, state_isBearish ? color.red : color.green)
+        label.set_style(txtEntry, label.style_label_left)
+
+    if not isAreaActive
+        // Sembunyikan semua elemen kalau area tidak aktif dan pola unconfirmed
+        box.set_bgcolor(zoneBox,      color.new(color.gray, 100))
+        box.set_border_color(zoneBox, color.new(color.gray, 100))
+        line.set_color(lineTP, color.new(color.green, 100))
+        line.set_color(lineSL, color.new(color.red,   100))
+        line.set_color(lineArrow, color.new(color.gray, 100))
+        label.set_text(lblPatt,  "")
+        label.set_text(txtEntry, "")
+        
+
+
+    // ═════════════════════════════════════════
+    // SECTION 15 — FIBONACCI TABLE (top right)
+    // ═════════════════════════════════════════
+    bool v_xab = inRange(xab, 0.618, fib_tol) or inRange(xab, 0.786, fib_tol) or (xab >= 0.382 - fib_tol and xab <= 0.618 + fib_tol)
+    bool v_abc = abc >= 0.382 - fib_tol and abc <= 0.886 + fib_tol
+    bool v_bcd = bcd >= 1.13  - fib_tol and bcd <= 3.618 + fib_tol
+    bool v_xad = xad >= 0.786 - fib_tol and xad <= 1.618 + fib_tol
+
+    color hdr_bg  = color.new(patternCol, 40)
+    color foot_bg = color.new(patternCol, 60)
+
+    table.cell(fibTable, 0, 0, "Leg",   text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 1, 0, "Ratio", text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 2, 0, "✓/✗",   text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 0, 1, "XAB",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 1, str.tostring(xab, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 1, v_xab ? "✓" : "✗", text_color=v_xab ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 2, "ABC",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 2, str.tostring(abc, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 2, v_abc ? "✓" : "✗", text_color=v_abc ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 3, "BCD",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 3, str.tostring(bcd, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 3, v_bcd ? "✓" : "✗", text_color=v_bcd ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 4, "XAD",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 4, str.tostring(xad, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 4, v_xad ? "✓" : "✗", text_color=v_xad ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 5, "Score",  text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 1, 5, str.tostring(signal_score) + "/5", text_color=signal_score >= 4 ? color.lime : signal_score >= 2 ? color.yellow : color.red, text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 2, 5, "",       text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 0, 6, "Pola",   text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 1, 6, patternName, text_color=patternCol, text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 2, 6, "",       text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    string aksi_txt = ""
+    color  aksi_col = color.gray
+    if is_overlap
+        aksi_txt := "⚠️ JGN ENTRY (RAWAN)"
+        aksi_col := color.orange
+    else if detectedPattern != ""
+        aksi_txt := "🔥 AYO ENTRY!"
+        aksi_col := isBearish ? color.red : color.lime
+    else
+        aksi_txt := "⏳ SABAR..."
+        aksi_col := color.gray
+    table.cell(fibTable, 0, 7, "Aksi",   text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 1, 7, aksi_txt, text_color=aksi_col, text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 2, 7, "",       text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 16 — SMC + VPA TABLE (bottom right)
+// ═══════════════════════════════════════════════════════════
+// [FIX #6] Referensi CHoCH di table juga disesuaikan dengan nama variabel baru
+if show_smc or show_vpa
+    vol_str     = str.tostring(vol_ratio, "#.##") + "x"
+    vol_col_tbl = is_vol_spike ? color.lime : vol_ratio >= 1.0 ? color.yellow : color.gray
+    ob_bull_s   = not na(ob_bull_bar) ? "✓ Aktif" : "–"
+    ob_bear_s   = not na(ob_bear_bar) ? "✓ Aktif" : "–"
+    bos_s       = bull_bos  ? "Lanjut Naik ▲"   : bear_bos  ? "Lanjut Turun ▼"   :
+                  choch_bull ? "Ganti Naik ▲" : choch_bear ? "Ganti Turun ▼" : "–"
+    bos_col_tbl = bull_bos or choch_bull ? color.lime : bear_bos or choch_bear ? color.red : color.gray
+    vpa_s       = is_bull_vol ? "Spike ▲" : is_bear_vol ? "Spike ▼" : vol_ratio >= 1.0 ? "Normal" : "Lemah"
+    vpa_col_tbl = is_bull_vol ? color.lime : is_bear_vol ? color.red : vol_ratio >= 1.0 ? color.yellow : color.gray
+    flow_s      = bull_ob_count > bear_ob_count ? "Masuk ▲ (" + str.tostring(bull_ob_count) + "x)" : bear_ob_count > bull_ob_count ? "Keluar ▼ (" + str.tostring(bear_ob_count) + "x)" : "Datar"
+    flow_c      = bull_ob_count > bear_ob_count ? color.lime : bear_ob_count > bull_ob_count ? color.red : color.gray
+
+    smc_hdr = color.new(color.navy, 20)
+    table.cell(smcTable, 0, 0, "Tren & Kekuatan", text_color=color.white,  text_size=size.small, bgcolor=smc_hdr)
+    table.cell(smcTable, 1, 0, "Status",    text_color=color.white,  text_size=size.small, bgcolor=smc_hdr)
+    table.cell(smcTable, 0, 1, "Arah Tren", text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 1, bos_s,       text_color=bos_col_tbl,  text_size=size.small)
+    table.cell(smcTable, 0, 2, "Support (Bawah)",text_color=color.green,  text_size=size.small)
+    table.cell(smcTable, 1, 2, ob_bull_s,   text_color=color.green,  text_size=size.small)
+    table.cell(smcTable, 0, 3, "Resisten (Atas)",text_color=color.red,    text_size=size.small)
+    table.cell(smcTable, 1, 3, ob_bear_s,   text_color=color.red,    text_size=size.small)
+    table.cell(smcTable, 0, 4, "Kekuatan Harga", text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 4, vol_str,      text_color=vol_col_tbl,  text_size=size.small)
+    table.cell(smcTable, 0, 5, "Validasi Arah",  text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 5, vpa_s,        text_color=vpa_col_tbl,  text_size=size.small)
+    table.cell(smcTable, 0, 6, "Arus Uang",      text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 6, flow_s,       text_color=flow_c,       text_size=size.small)
+    if show_mtf
+        table.cell(smcTable, 0, 7, "Tren 1 Jam (H1)", text_color=color.white, text_size=size.small)
+        table.cell(smcTable, 1, 7, h1_trend_up ? "Naik ▲" : h1_trend_down ? "Turun ▼" : "Datar ⟷", text_color=h1_trend_up ? color.lime : h1_trend_down ? color.red : color.gray, text_size=size.small)
+        table.cell(smcTable, 0, 8, "Tren 4 Jam (H4)", text_color=color.white, text_size=size.small)
+        table.cell(smcTable, 1, 8, h4_trend_up ? "Naik ▲" : h4_trend_down ? "Turun ▼" : "Datar ⟷", text_color=h4_trend_up ? color.lime : h4_trend_down ? color.red : color.gray, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 7, "", text_size=size.small)
+        table.cell(smcTable, 1, 7, "", text_size=size.small)
+        table.cell(smcTable, 0, 8, "", text_size=size.small)
+        table.cell(smcTable, 1, 8, "", text_size=size.small)
+
+    // ── Fitur Premium Extra ──
+    // VWAP Status
+    if show_vwap
+        table.cell(smcTable, 0, 9,  "VWAP",          text_color=color.yellow, text_size=size.small)
+        table.cell(smcTable, 1, 9,  vwap_above ? "Di Atas ▲" : "Di Bawah ▼", text_color=vwap_above ? color.lime : color.red, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 9, "", text_size=size.small)
+        table.cell(smcTable, 1, 9, "", text_size=size.small)
+
+    // Volatility Speedometer
+    if show_volatility
+        table.cell(smcTable, 0, 10, "Volatilitas",   text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 10, v_status,         text_color=v_color,      text_size=size.small)
+    else
+        table.cell(smcTable, 0, 10, "", text_size=size.small)
+        table.cell(smcTable, 1, 10, "", text_size=size.small)
+
+    // Candle Pattern
+    string cp_display = candle_patt_txt == "" ? "–" : candle_patt_txt
+    color  cp_col     = candle_patt_txt == "" ? color.gray : candle_patt_col
+    table.cell(smcTable, 0, 11, "Pola Candle",   text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 11, cp_display,       text_color=cp_col,       text_size=size.small)
+    // PDH/PDL Reference
+    if show_pdhl
+        table.cell(smcTable, 0, 12, "PDH / PDL",     text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 12, str.tostring(pdh, "#.##") + " / " + str.tostring(pdl, "#.##"), text_color=color.gray, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 12, "", text_size=size.small)
+        table.cell(smcTable, 1, 12, "", text_size=size.small)
+
+    // Status FVG
+    if show_fvg
+        table.cell(smcTable, 0, 13, "Status FVG",    text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 13, fvg_txt,         text_color=fvg_col,      text_size=size.small)
+    else
+        table.cell(smcTable, 0, 13, "", text_size=size.small)
+        table.cell(smcTable, 1, 13, "", text_size=size.small)
+
+    // Liquidity Sweep
+    if show_sweep
+        table.cell(smcTable, 0, 14, "Sapuan (Sweep)", text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 14, liq_sweep_txt,   text_color=liq_sweep_col, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 14, "", text_size=size.small)
+        table.cell(smcTable, 1, 14, "", text_size=size.small)
+
+    // Tembok POC (Daily HVN)
+    if show_poc
+        table.cell(smcTable, 0, 15, "Tembok POC",    text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 15, not na(daily_poc) ? str.tostring(daily_poc, "#.##") : "–", text_color=color.fuchsia, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 15, "", text_size=size.small)
+        table.cell(smcTable, 1, 15, "", text_size=size.small)
+
+    // Spread Status
+    if use_spread_filter
+        table.cell(smcTable, 0, 16, "Status Spread",   text_color=color.white,  text_size=size.small)
+        table.cell(smcTable, 1, 16, spread_ok ? "✅ NORMAL" : "📵 LEBAR", text_color=spread_ok ? color.lime : color.red, text_size=size.small)
+    else
+        table.cell(smcTable, 0, 16, "", text_size=size.small)
+        table.cell(smcTable, 1, 16, "", text_size=size.small)
+
+    // Trading Mode Label
+    string mode_txt = use_h4_filter ? "⚖️ SWING MODE" : "⚡ SCALPING MODE"
+    color mode_col = use_h4_filter ? color.orange : color.aqua
+    table.cell(smcTable, 0, 17, "Mode", text_color=color.white, text_size=size.small)
+    table.cell(smcTable, 1, 17, mode_txt, text_color=mode_col, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 17 — WINRATE TABLE (top left)
+// ═══════════════════════════════════════════════════════════
+// [FIX #4] Gunakan float() untuk menghindari integer division yang selalu = 0
+wr_total     = total_signals   == 0 ? 0.0 : float(total_wins)     / float(total_signals)   * 100.0
+wr_gartley   = gartley_total   == 0 ? 0.0 : float(gartley_win)    / float(gartley_total)   * 100.0
+wr_bat       = bat_total       == 0 ? 0.0 : float(bat_win)        / float(bat_total)       * 100.0
+wr_butterfly = butterfly_total == 0 ? 0.0 : float(butterfly_win)  / float(butterfly_total) * 100.0
+wr_crab      = crab_total      == 0 ? 0.0 : float(crab_win)       / float(crab_total)      * 100.0
+wr_shark     = shark_total     == 0 ? 0.0 : float(shark_win)      / float(shark_total)     * 100.0
+wr_cypher    = cypher_total    == 0 ? 0.0 : float(cypher_win)     / float(cypher_total)    * 100.0
+
+wrColor(wr) =>
+    wr >= 60 ? color.green : wr >= 40 ? color.yellow : color.red
+
+win_hdr = color.new(color.navy, 20)
+
+table.cell(winTable, 0, 0, "Nama Pola",     text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 1, 0, "Jml Muncul",   text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 2, 0, "Peluang Menang",  text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+
+table.cell(winTable, 0, 1, "Semua Pola",    text_color=color.white, text_size=size.small)
+table.cell(winTable, 1, 1, str.tostring(total_signals),  text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 1, str.tostring(wr_total,  "#.#") + "%", text_color=wrColor(wr_total), text_size=size.small)
+
+table.cell(winTable, 0, 2, "Gartley",  text_color=col_gartley, text_size=size.small)
+table.cell(winTable, 1, 2, str.tostring(gartley_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 2, str.tostring(wr_gartley,  "#.#") + "%", text_color=wrColor(wr_gartley), text_size=size.small)
+
+table.cell(winTable, 0, 3, "Bat",      text_color=col_bat,     text_size=size.small)
+table.cell(winTable, 1, 3, str.tostring(bat_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 3, str.tostring(wr_bat,      "#.#") + "%", text_color=wrColor(wr_bat), text_size=size.small)
+
+table.cell(winTable, 0, 4, "Butterfly",text_color=col_butterfly,text_size=size.small)
+table.cell(winTable, 1, 4, str.tostring(butterfly_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 4, str.tostring(wr_butterfly,"#.#") + "%", text_color=wrColor(wr_butterfly), text_size=size.small)
+
+table.cell(winTable, 0, 5, "Crab",     text_color=col_crab,    text_size=size.small)
+table.cell(winTable, 1, 5, str.tostring(crab_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 5, str.tostring(wr_crab,     "#.#") + "%", text_color=wrColor(wr_crab), text_size=size.small)
+
+table.cell(winTable, 0, 6, "Shark",    text_color=col_shark,   text_size=size.small)
+table.cell(winTable, 1, 6, str.tostring(shark_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 6, str.tostring(wr_shark,    "#.#") + "%", text_color=wrColor(wr_shark), text_size=size.small)
+
+table.cell(winTable, 0, 7, "Cypher",   text_color=col_cypher,  text_size=size.small)
+table.cell(winTable, 1, 7, str.tostring(cypher_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 7, str.tostring(wr_cypher,   "#.#") + "%", text_color=wrColor(wr_cypher), text_size=size.small)
+
+table.cell(winTable, 0, 8, "TP=0.382CD | SL=0.20AD", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))
+table.cell(winTable, 1, 8, "", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))
+table.cell(winTable, 2, 8, "", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))
+
+// ── Strategy Tester Stats ──
+table.cell(winTable, 0, 9, "🤖 STATS ROBOT", text_color=color.yellow, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 1, 9, "Nilai", text_color=color.yellow, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 2, 9, "", text_color=color.yellow, text_size=size.small, bgcolor=win_hdr)
+
+table.cell(winTable, 0, 10, "Total Trade", text_color=color.white, text_size=size.small)
+table.cell(winTable, 1, 10, str.tostring(strategy.closedtrades), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 10, "", text_size=size.small)
+
+table.cell(winTable, 0, 11, "Menang (Win)", text_color=color.green, text_size=size.small)
+table.cell(winTable, 1, 11, str.tostring(strategy.wintrades), text_color=color.green, text_size=size.small)
+table.cell(winTable, 2, 11, "", text_size=size.small)
+
+table.cell(winTable, 0, 12, "Kalah (Loss)", text_color=color.red, text_size=size.small)
+table.cell(winTable, 1, 12, str.tostring(strategy.losstrades), text_color=color.red, text_size=size.small)
+table.cell(winTable, 2, 12, "", text_size=size.small)
+
+float net_prof = strategy.netprofit
+color prof_col = net_prof > 0 ? color.lime : net_prof < 0 ? color.red : color.gray
+table.cell(winTable, 0, 13, "Net Profit", text_color=color.white, text_size=size.small)
+table.cell(winTable, 1, 13, "$" + str.tostring(net_prof, "#.##"), text_color=prof_col, text_size=size.small)
+table.cell(winTable, 2, 13, "", text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 18 — FITUR VISUAL PREMIUM
+// ═══════════════════════════════════════════════════════════
+
+// ── VWAP Line ───────────────────────────────────────────────
+if show_vwap and not na(vwap_val)
+    line.set_xy1(lineVWAP, bar_index - 1, vwap_val)
+    line.set_xy2(lineVWAP, bar_index,     vwap_val)
+    label.set_xy(lblVWAP, bar_index, vwap_val)
+    label.set_text(lblVWAP, "VWAP: " + str.tostring(vwap_val, "#.##"))
+
+// ── PDH / PDL Lines ─────────────────────────────────────────
+if show_pdhl and not na(pdh) and not na(pdl) and is_adv
+    line.set_xy1(linePDH, bar_index - 10, pdh)
+    line.set_xy2(linePDH, bar_index + 20, pdh)
+    line.set_style(linePDH, line.style_dashed)
+    line.set_color(linePDH, color.red)
+    label.set_xy(lblPDH,  bar_index + 10, pdh)
+    label.set_text(lblPDH, "[PDH Liquidity] " + str.tostring(pdh, "#.##"))
+    label.set_textcolor(lblPDH, color.red)
+    
+    line.set_xy1(linePDL, bar_index - 10, pdl)
+    line.set_xy2(linePDL, bar_index + 20, pdl)
+    line.set_style(linePDL, line.style_dashed)
+    line.set_color(linePDL, color.green)
+    label.set_xy(lblPDL,  bar_index + 10, pdl)
+    label.set_text(lblPDL, "[PDL Liquidity] " + str.tostring(pdl, "#.##"))
+    label.set_textcolor(lblPDL, color.green)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 19 — FITUR VISUAL TRADER MANUAL
+// ═══════════════════════════════════════════════════════════
+
+// 1. Garis Magnet (D/W/M Open)
+d_open = request.security(syminfo.tickerid, "D", open, lookahead=barmerge.lookahead_on)
+w_open = request.security(syminfo.tickerid, "W", open, lookahead=barmerge.lookahead_on)
+m_open = request.security(syminfo.tickerid, "M", open, lookahead=barmerge.lookahead_on)
+
+var line dOpenLine = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.new(color.gray, 50), style=line.style_dotted, width=1)
+var line wOpenLine = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.new(color.orange, 50), style=line.style_dotted, width=2)
+var line mOpenLine = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.new(color.purple, 50), style=line.style_dotted, width=2)
+
+var label dOpenLbl = label.new(na, na, "[D-Open]", xloc=xloc.bar_index, style=label.style_none, textcolor=color.gray, size=size.small)
+var label wOpenLbl = label.new(na, na, "[W-Open]", xloc=xloc.bar_index, style=label.style_none, textcolor=color.orange, size=size.small)
+var label mOpenLbl = label.new(na, na, "[M-Open]", xloc=xloc.bar_index, style=label.style_none, textcolor=color.purple, size=size.small)
+
+if show_magnet and is_adv
+    if not na(d_open)
+        line.set_xy1(dOpenLine, bar_index - 10, d_open)
+        line.set_xy2(dOpenLine, bar_index + 15, d_open)
+        label.set_xy(dOpenLbl, bar_index + 5, d_open)
+    if not na(w_open)
+        line.set_xy1(wOpenLine, bar_index - 10, w_open)
+        line.set_xy2(wOpenLine, bar_index + 15, w_open)
+        label.set_xy(wOpenLbl, bar_index + 5, w_open)
+    if not na(m_open)
+        line.set_xy1(mOpenLine, bar_index - 10, m_open)
+        line.set_xy2(mOpenLine, bar_index + 15, m_open)
+        label.set_xy(mOpenLbl, bar_index + 5, m_open)
+
+// 2. Asian Range Sweep Targets
+var float asian_high = na
+var float asian_low = na
+var int asian_start_bar = na
+
+in_asian_session = time(timeframe.period, "2000-0000", tz)
+is_new_asian = in_asian_session and not in_asian_session[1]
+
+if is_new_asian
+    asian_high := high
+    asian_low := low
+    asian_start_bar := bar_index
+else if in_asian_session
+    asian_high := math.max(asian_high, high)
+    asian_low := math.min(asian_low, low)
+
+var box asianBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.blue, 95), border_color=color.blue, border_style=line.style_dashed)
+var line ahLine = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.blue, style=line.style_dashed)
+var line alLine = line.new(na, na, na, na, xloc=xloc.bar_index, color=color.blue, style=line.style_dashed)
+var label ahLbl = label.new(na, na, "💧 Asian High Liquidity", xloc=xloc.bar_index, style=label.style_none, textcolor=color.blue, size=size.small)
+var label alLbl = label.new(na, na, "💧 Asian Low Liquidity", xloc=xloc.bar_index, style=label.style_none, textcolor=color.blue, size=size.small)
+
+if show_asian and not na(asian_high) and not na(asian_low) and is_adv
+    box.set_lefttop(asianBox, asian_start_bar, asian_high)
+    box.set_rightbottom(asianBox, in_asian_session ? bar_index : asian_start_bar + 48, asian_low)
+    
+    line.set_xy1(ahLine, asian_start_bar, asian_high)
+    line.set_xy2(ahLine, bar_index + 20, asian_high)
+    label.set_xy(ahLbl, bar_index + 10, asian_high)
+    
+    line.set_xy1(alLine, asian_start_bar, asian_low)
+    line.set_xy2(alLine, bar_index + 20, asian_low)
+    label.set_xy(alLbl, bar_index + 10, asian_low)
+
+// 3. New York True Day Open (08:30 EST)
+ny_open_time = time(timeframe.period, "0830-0835", "America/New_York")
+is_ny_open = ny_open_time and not ny_open_time[1]
+
+if show_ny_open and is_ny_open and is_adv
+    line.new(bar_index, low - ta.atr(14), bar_index, high + ta.atr(14), xloc=xloc.bar_index, extend=extend.both, color=color.new(color.red, 50), style=line.style_dashed, width=1)
+    label.new(bar_index, high + ta.atr(14)*2, "🗽 NY Open 08:30\n(Awas Volatilitas!)", xloc=xloc.bar_index, style=label.style_label_down, color=color.new(color.red, 80), textcolor=color.white, size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 20 — [FITUR BARU] Session Anchored VWAP (V4.0)
+// ═══════════════════════════════════════════════════════════
+
+bool is_asia_start   = hour == 0  and minute == 0
+bool is_london_start = hour == 8  and minute == 0
+bool is_ny_start     = hour == 13 and minute == 0
+
+// (in_asian, in_london, in_ny sudah dideklarasikan di atas pada SECTION 8.5)
+
+var float asia_pv   = 0.0
+var float asia_vol   = 0.0
+var float london_pv = 0.0
+var float london_vol = 0.0
+var float ny_pv     = 0.0
+var float ny_vol     = 0.0
+
+if is_asia_start
+    asia_pv := 0.0
+    asia_vol := 0.0
+if is_london_start
+    london_pv := 0.0
+    london_vol := 0.0
+if is_ny_start
+    ny_pv := 0.0
+    ny_vol := 0.0
+
+float hlc_v = hlc3
+if in_asian
+    asia_pv   += hlc_v * volume
+    asia_vol  += volume
+if in_london
+    london_pv += hlc_v * volume
+    london_vol += volume
+if in_ny
+    ny_pv     += hlc_v * volume
+    ny_vol    += volume
+
+float vwap_asia   = asia_vol   > 0 ? asia_pv   / asia_vol   : na
+float vwap_london = london_vol > 0 ? london_pv / london_vol : na
+float vwap_ny     = ny_vol     > 0 ? ny_pv     / ny_vol     : na
+
+bool vwap_tf_valid = timeframe.isintraday
+plot(vwap_tf_valid and is_adv and show_session_vwap ? vwap_asia   : na, "VWAP Asia",   color=color.purple, linewidth=1)
+plot(vwap_tf_valid and is_adv and show_session_vwap ? vwap_london : na, "VWAP London", color=color.blue,   linewidth=1)
+plot(vwap_tf_valid and is_adv and show_session_vwap ? vwap_ny     : na, "VWAP NY",     color=color.orange, linewidth=1)
+
+// ═══ [V4.1] WEEKLY/DAILY MACRO BIAS FILTER (Plot) ═══
+plot(show_macro_ema ? ema50_daily : na, "EMA 50 Daily", color=color.yellow, linewidth=1)
+plot(show_macro_ema ? ema50_weekly : na, "EMA 50 Weekly", color=color.white, linewidth=1)
+
+// ═══ HARGA ENTRY, TP, & SL (Tampil Sebagai Plot Line) ═══
+plot(isAreaActive ? saved_sl  : na, "SL",  color=color.red,   linewidth=1, style=plot.style_linebr)
+plot(isAreaActive ? saved_tp  : na, "TP2", color=color.blue,  linewidth=1, style=plot.style_linebr)
+plot(isAreaActive ? zoneTop   : na, "Top", color=color.orange,linewidth=1, style=plot.style_linebr)
+plot(isAreaActive ? zoneBot   : na, "Bot", color=color.green, linewidth=1, style=plot.style_linebr)
+
+// Hitung nilai TP1 secara langsung
+float tp1_val = isAreaActive ? (state_isBearish ? zoneBot - math.abs(saved_tp - zoneBot) * 0.5 : zoneTop + math.abs(saved_tp - zoneTop) * 0.5) : na
+plot(tp1_val, "TP1", color=color.aqua, linewidth=1, style=plot.style_linebr)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 18 — SMC QUICK ENTRY (SCALPING)
+// ═══════════════════════════════════════════════════════════
+// Catatan: is_disp_bull/bear memastikan hanya masuk jika ada lonjakan volume institusi
+bool quick_bull = use_quick_entry and strategy.position_size == 0 and not is_on_tilt and filter_pass_bull and not na(ob_bull_top) and close <= ob_bull_top and close >= ob_bull_bot and is_disp_bull
+bool quick_bear = use_quick_entry and strategy.position_size == 0 and not is_on_tilt and filter_pass_bear and not na(ob_bear_top) and close >= ob_bear_bot and close <= ob_bear_top and is_disp_bear
+
+if quick_bull
+    box.new(bar_index - 1, ob_bull_top, bar_index + 1, ob_bull_bot, bgcolor=color.new(color.green, 65), border_color=color.green, border_width=1)
+    label.new(bar_index, ob_bull_bot, "⚡ QUICK BUY", color=color.new(color.green, 100), textcolor=color.green, style=label.style_label_up, size=size.small)
+    float q_sl = ob_bull_bot - (atr14 * 1.5)
+    float q_tp = ob_bull_top + (math.abs(ob_bull_top - ob_bull_bot) * 2)
+    strategy.entry("Quick_Buy", strategy.long)
+    strategy.exit("Exit_Q_Buy", "Quick_Buy", limit=q_tp, stop=q_sl)
+
+if quick_bear
+    box.new(bar_index - 1, ob_bear_top, bar_index + 1, ob_bear_bot, bgcolor=color.new(color.red, 65), border_color=color.red, border_width=1)
+    label.new(bar_index, ob_bear_top, "⚡ QUICK SELL", color=color.new(color.red, 100), textcolor=color.red, style=label.style_label_down, size=size.small)
+    float q_sl = ob_bear_top + (atr14 * 1.5)
+    float q_tp = ob_bear_bot - (math.abs(ob_bear_top - ob_bear_bot) * 2)
+    strategy.entry("Quick_Sell", strategy.short)
+    strategy.exit("Exit_Q_Sell", "Quick_Sell", limit=q_tp, stop=q_sl)
+
+plot(quick_bull or quick_bear ? close : na, "Quick Entry", color=color.yellow, style=plot.style_circles, linewidth=3)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 19 — SWEEP QUICK ENTRY (TURTLE SOUP)
+// ═══════════════════════════════════════════════════════════
+// Gunakan VWAP sesi yang aktif (Prioritas: London > NY > Asia)
+float active_vwap = not na(vwap_london) ? vwap_london : not na(vwap_ny) ? vwap_ny : not na(vwap_asia) ? vwap_asia : na
+
+// Pre-kalkulasi SL, TP, RR untuk filter minimum
+float raw_sl_buy = ta.lowest(low, 5) - (atr14 * 1.5)
+float sl_buy_pre = math.max(raw_sl_buy, close - atr14 * 3)
+float tp_buy_pre = not na(pdh) and pdh > close and pdh < close + (atr14 * 10) ? pdh : close + (atr14 * 6)
+float rr_buy = math.abs(close - sl_buy_pre) > 0 ? math.abs(tp_buy_pre - close) / math.abs(close - sl_buy_pre) : 0
+
+float raw_sl_sell = ta.highest(high, 5) + (atr14 * 1.5)
+float sl_sell_pre = math.min(raw_sl_sell, close + atr14 * 3)
+float tp_sell_pre = not na(pdl) and pdl < close and pdl > close - (atr14 * 10) ? pdl : close - (atr14 * 6)
+float rr_sell = math.abs(sl_sell_pre - close) > 0 ? math.abs(close - tp_sell_pre) / math.abs(sl_sell_pre - close) : 0
+
+// Catatan: bull_sweep adalah jebakan bawah (sinyal BUY), bear_sweep adalah jebakan atas (sinyal SELL)
+bool sweep_buy = use_sweep_entry and not is_on_tilt and spread_ok and (na(active_vwap) or close < active_vwap) and bull_sweep and (is_pin_bar_bull or engulf_bull_conf or is_disp_bull) and barstate.isconfirmed and rr_buy >= 1.5
+bool sweep_sell = use_sweep_entry and not is_on_tilt and spread_ok and (na(active_vwap) or close > active_vwap) and bear_sweep and (is_pin_bar_bear or engulf_bear_conf or is_disp_bear) and barstate.isconfirmed and rr_sell >= 1.5
+
+var bool sweep_buy_drawn = false
+if sweep_buy and not sweep_buy_drawn
+    string fmt = is_crypto ? "#.00" : "#.##"
+    float rr_val = math.round(rr_buy, 1)
+    string buy_info = "🧹 SWEEP BUY\n" + "Entry : " + str.tostring(close, fmt) + "\n" + "SL    : " + str.tostring(sl_buy_pre, fmt) + "\n" + "TP    : " + str.tostring(tp_buy_pre, fmt) + "\n" + "RR    : 1:" + str.tostring(rr_val, "#.#")
+    label.new(bar_index, low - atr14, buy_info, color=color.new(color.green, 30), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    strategy.entry("Sweep_Buy", strategy.long)
+    strategy.exit("Exit_SB", "Sweep_Buy", limit=tp_buy_pre, stop=sl_buy_pre)
+    sweep_buy_drawn := true
+
+if not sweep_buy
+    sweep_buy_drawn := false
+
+var bool sweep_sell_drawn = false
+if sweep_sell and not sweep_sell_drawn
+    string fmt = is_crypto ? "#.00" : "#.##"
+    float rr_val = math.round(rr_sell, 1)
+    string sell_info = "🧹 SWEEP SELL\n" + "Entry : " + str.tostring(close, fmt) + "\n" + "SL    : " + str.tostring(sl_sell_pre, fmt) + "\n" + "TP    : " + str.tostring(tp_sell_pre, fmt) + "\n" + "RR    : 1:" + str.tostring(rr_val, "#.#")
+    label.new(bar_index, high + atr14, sell_info, color=color.new(color.red, 30), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    strategy.entry("Sweep_Sell", strategy.short)
+    strategy.exit("Exit_SS", "Sweep_Sell", limit=tp_sell_pre, stop=sl_sell_pre)
+    sweep_sell_drawn := true
+
+if not sweep_sell
+    sweep_sell_drawn := false
+
+plot(sweep_buy ? low : na, "Sweep Buy", color=color.lime, style=plot.style_circles, linewidth=4)
+plot(sweep_sell ? high : na, "Sweep Sell", color=color.red, style=plot.style_circles, linewidth=4)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 20 — OTE REJECTION DETECTOR (IMPROVEMENT 3)
+// ═══════════════════════════════════════════════════════════
+// Deteksi harga masuk OTE zone
+bool in_ote_zone = low <= ote_top and high >= ote_bot
+
+// Deteksi rejection di OTE (bearish)
+// Ditambahkan Anti-Spam dan Syarat Momentum Institusi (Displacement)
+bool ote_bear_rejection = in_ote_zone and (is_pin_bar_bear or engulf_bear_conf or is_disp_bear) and close < ote_top and barstate.isconfirmed
+
+// Deteksi rejection di OTE (bullish)  
+// Ditambahkan Anti-Spam dan Syarat Momentum Institusi (Displacement)
+bool ote_bull_rejection = in_ote_zone and (is_pin_bar_bull or engulf_bull_conf or is_disp_bull) and close > ote_bot and barstate.isconfirmed
+
+// Visual OTE Rejection
+plotshape(ote_bear_rejection, "OTE Bear Reject", shape.triangledown, location.abovebar, color.red, size=size.normal)
+plotshape(ote_bull_rejection, "OTE Bull Reject", shape.triangleup, location.belowbar, color.lime, size=size.normal)
+
+// Pre-kalkulasi SL untuk OTE di Global Scope agar fungsi series (ta.highest) bekerja dengan benar
+float raw_sl_ote_bear = ta.highest(high, 5) + (atr14 * 1.5)
+float raw_sl_ote_bull = ta.lowest(low, 5) - (atr14 * 1.5)
+
+// Entry saat OTE rejection terkonfirmasi
+var bool ote_bear_drawn = false
+if ote_bear_rejection and filter_pass_bear and not ote_bear_drawn
+    float sl_ote = math.min(raw_sl_ote_bear, close + (atr14 * 3))
+    float tp_ote = close - (math.abs(sl_ote - close) * 2)
+    strategy.entry("OTE_Sell", strategy.short)
+    strategy.exit("Exit_OTE_S", "OTE_Sell", stop=sl_ote, limit=tp_ote)
+    label.new(bar_index, high + atr14, "🎯 OTE SELL\nSL: " + str.tostring(sl_ote, "#.##") + "\nTP: " + str.tostring(tp_ote, "#.##"), color=color.new(color.red, 30), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    ote_bear_drawn := true
+
+if not (ote_bear_rejection and filter_pass_bear)
+    ote_bear_drawn := false
+
+var bool ote_bull_drawn = false
+if ote_bull_rejection and filter_pass_bull and not ote_bull_drawn
+    float sl_ote = math.max(raw_sl_ote_bull, close - (atr14 * 3))
+    float tp_ote = close + (math.abs(close - sl_ote) * 2)
+    strategy.entry("OTE_Buy", strategy.long)
+    strategy.exit("Exit_OTE_B", "OTE_Buy", stop=sl_ote, limit=tp_ote)
+    label.new(bar_index, low - atr14, "🎯 OTE BUY\nSL: " + str.tostring(sl_ote, "#.##") + "\nTP: " + str.tostring(tp_ote, "#.##"), color=color.new(color.green, 30), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    ote_bull_drawn := true
+
+if not (ote_bull_rejection and filter_pass_bull)
+    ote_bull_drawn := false
+
+// ── DEBUG PLOTS REMOVED ──
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL VISUAL CONFIRMATION PLOTSHAPE (BUGFIX SCOPE)
+// ═══════════════════════════════════════════════════════════
+bool g_hit_ob_bull = not na(ob_bull_top) and low <= ob_bull_top and close >= ob_bull_bot
+bool g_hit_bb_bull = not na(bb_bull_top) and low <= bb_bull_top and close >= bb_bull_bot
+bool g_hit_ob_bear = not na(ob_bear_bot) and high >= ob_bear_bot and close <= ob_bear_top
+bool g_hit_bb_bear = not na(bb_bear_bot) and high >= bb_bear_bot and close <= bb_bear_top
+
+bool g_price_in_bull_zone = close >= (g_hit_ob_bull ? ob_bull_bot : bb_bull_bot) and close <= (g_hit_ob_bull ? ob_bull_top : bb_bull_top)
+bool g_price_in_bear_zone = close >= (g_hit_ob_bear ? ob_bear_bot : bb_bear_bot) and close <= (g_hit_ob_bear ? ob_bear_top : bb_bear_top)
+
+bool g_bull_confirm_in_zone = g_price_in_bull_zone and (pin_bar_bull_conf or engulf_bull_conf) and (volume > vol_ma * 1.2) and barstate.isconfirmed
+bool g_bear_confirm_in_zone = g_price_in_bear_zone and (pin_bar_bear_conf or engulf_bear_conf) and (volume > vol_ma * 1.2) and barstate.isconfirmed
+
+var bool bull_conf_drawn = false
+bool trigger_bull_conf = false
+if g_bull_confirm_in_zone and not isAreaActive and not bull_conf_drawn
+    trigger_bull_conf := true
+    bull_conf_drawn := true
+
+if not (g_bull_confirm_in_zone and not isAreaActive)
+    bull_conf_drawn := false
+
+var bool bear_conf_drawn = false
+bool trigger_bear_conf = false
+if g_bear_confirm_in_zone and not isAreaActive and not bear_conf_drawn
+    trigger_bear_conf := true
+    bear_conf_drawn := true
+
+if not (g_bear_confirm_in_zone and not isAreaActive)
+    bear_conf_drawn := false
+
+plotshape(trigger_bull_conf, "Bull Confirm", shape.circle, location.belowbar, color.lime, size=size.small)
+plotshape(trigger_bear_conf, "Bear Confirm", shape.circle, location.abovebar, color.red, size=size.small)

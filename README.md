@@ -1,70 +1,54 @@
-# Getting Started with Create React App
+# Pivot Analyzer Pro — TradingStars
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Pivot Point analyzer untuk trader IDX. Hitung level Pivot (PP, R1–R3, S1–S3) dari
+data OHLC, lengkap dengan analisa tren (MA20), RRR, sinyal, pivot ladder, chart,
+dan **analisa AI (Google Gemini)**.
 
-## Available Scripts
+Dibangun dengan **Next.js 16 (App Router) + React 19 + Tailwind CSS v4**.
 
-In the project directory, you can run:
+## Fitur
 
-### `npm start`
+- Kalkulasi Pivot Point (Daily / Weekly / Monthly)
+- Deteksi pola candle, confluence, dan Risk/Reward ratio
+- Pivot ladder, sinyal, dan chart (lightweight-charts)
+- **Analisa AI via Gemini** — ringkasan sentiment, confidence gauge, rencana
+  Entry/TP/SL, dengan cache, auto-analisa, salin & share Telegram
+- Watchlist, History, Average calculator, export gambar
+- Gate akses via Bot Telegram (production)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Setup
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+npm install
+cp .env.example .env.local   # lalu isi nilainya
+npm run dev                  # http://localhost:3000
+```
 
-### `npm test`
+> Saat development, gate Telegram otomatis dibypass (lihat `proxy.ts`), jadi bisa
+> langsung akses tanpa login.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Environment Variables
 
-### `npm run build`
+Salin dari `.env.example` ke `.env.local`:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+| Variable | Wajib | Keterangan |
+|---|---|---|
+| `GEMINI_API_KEY` | untuk fitur AI | API key Google Gemini — ambil di https://aistudio.google.com/apikey |
+| `GEMINI_MODEL` | opsional | Default `gemini-2.5-flash` |
+| `NEXT_PUBLIC_API_URL` | opsional | Backend API (auto-fill OHLC) |
+| `BOT_TOKEN`, `GROUP_ID`, `JWT_SECRET` | production | Gate akses Bot Telegram |
+| `NEXT_PUBLIC_SITE_URL` | production | URL situs (metadata & share) |
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Struktur
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- `app/page.jsx` — halaman utama (kalkulator + UI)
+- `app/api/ai-analyze/route.ts` — endpoint analisa AI (Gemini, server-side)
+- `app/globals.css` — Tailwind + style 3D
+- `proxy.ts` — gate auth (Next 16; dulu `middleware.ts`)
+- `utils/patterns.js` — deteksi pola candle & confluence
+- `archive/` — skrip dev lama (tidak dipakai runtime)
 
-### `npm run eject`
+## Deploy
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Optimized untuk **Vercel**. Set semua env production di dashboard Vercel. Di
+production, gate Telegram dan proteksi endpoint AI aktif penuh.

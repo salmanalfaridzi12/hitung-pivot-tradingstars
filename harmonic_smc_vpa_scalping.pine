@@ -1,0 +1,726 @@
+//@version=5
+indicator("Harmonic + SMC + VPA [Scalping M5/M15]", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=100)
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║          HARMONIC + SMC + VPA — SCALPING M5/M15         ║
+// ║  Fitur: XABCD Pattern | Order Block | BOS/CHoCH | VPA   ║
+// ║  Signal Score 0-5 | Winrate Tracker per Pola            ║
+// ╚══════════════════════════════════════════════════════════╝
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 1 — INPUTS
+// ═══════════════════════════════════════════════════════════
+
+// ── Harmonic ────────────────────────────────────────────────
+length      = input.int(5,     title="Sensitivitas Pivot (M5: 4-5, M15: 5-7)", minval=2, maxval=20, group="⚙️ Harmonic")
+zone_buffer = input.float(0.001, title="Buffer Area (%)", step=0.001, group="⚙️ Harmonic")
+fib_tol     = input.float(0.06,  title="Toleransi Fibonacci", step=0.005, group="⚙️ Harmonic")
+box_width   = input.int(20,    title="Lebar Box (bar)", minval=5, maxval=100, group="⚙️ Harmonic")
+
+show_gartley   = input.bool(true, title="Gartley",   group="📐 Pola Harmonic")
+show_bat       = input.bool(true, title="Bat",        group="📐 Pola Harmonic")
+show_butterfly = input.bool(true, title="Butterfly",  group="📐 Pola Harmonic")
+show_crab      = input.bool(true, title="Crab",       group="📐 Pola Harmonic")
+show_shark     = input.bool(true, title="Shark",      group="📐 Pola Harmonic")
+show_cypher    = input.bool(true, title="Cypher",     group="📐 Pola Harmonic")
+
+col_gartley    = input.color(color.blue,   title="Warna Gartley",   group="🎨 Warna")
+col_bat        = input.color(color.orange, title="Warna Bat",       group="🎨 Warna")
+col_butterfly  = input.color(color.purple, title="Warna Butterfly", group="🎨 Warna")
+col_crab       = input.color(color.teal,   title="Warna Crab",      group="🎨 Warna")
+col_shark      = input.color(color.red,    title="Warna Shark",     group="🎨 Warna")
+col_cypher     = input.color(color.lime,   title="Warna Cypher",    group="🎨 Warna")
+
+// ── SMC ─────────────────────────────────────────────────────
+show_smc = input.bool(true, title="Aktifkan SMC",          group="🧠 SMC")
+show_ob  = input.bool(true, title="Tampilkan Order Block", group="🧠 SMC")
+show_bos = input.bool(true, title="Tampilkan BOS / CHoCH", group="🧠 SMC")
+
+// ── VPA ─────────────────────────────────────────────────────
+show_vpa       = input.bool(true,  title="Aktifkan VPA",           group="📊 VPA")
+vol_ma_len     = input.int(20,     title="Volume MA Length",        group="📊 VPA", minval=5)
+vol_spike_mult = input.float(1.5,  title="Spike Multiplier",        group="📊 VPA", step=0.1)
+show_vol_bars  = input.bool(true,  title="Warna Bar Volume",        group="📊 VPA")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 2 — PIVOT DETECTION
+// ═══════════════════════════════════════════════════════════
+ph = ta.pivothigh(high, length, length)
+pl = ta.pivotlow(low,  length, length)
+
+var float[] p_vals  = array.new_float(5, na)
+var int[]   p_bars  = array.new_int(5,  na)
+var int[]   p_types = array.new_int(5,  0)
+
+update_pivot(val, b, typ) =>
+    array.unshift(p_vals,  val)
+    array.pop(p_vals)
+    array.unshift(p_bars,  b)
+    array.pop(p_bars)
+    array.unshift(p_types, typ)
+    array.pop(p_types)
+
+if not na(ph)
+    update_pivot(ph, bar_index[length], 1)
+if not na(pl)
+    update_pivot(pl, bar_index[length], -1)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 3 — FIBONACCI HELPERS
+// ═══════════════════════════════════════════════════════════
+inRange(val, target, tol) =>
+    math.abs(val - target) <= tol
+
+// Gartley: XAB≈0.618, ABC=0.382-0.886, BCD=1.13-1.618, XAD≈0.786
+isGartley(xab, abc, bcd, xad) =>
+    inRange(xab, 0.618, fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.13  - fib_tol) and (bcd <= 1.618 + fib_tol) and
+     inRange(xad, 0.786, fib_tol)
+
+// Bat: XAB=0.382-0.500, ABC=0.382-0.886, BCD=1.618-2.618, XAD≈0.886
+isBat(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.500 + fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.618 + fib_tol) and
+     inRange(xad, 0.886, fib_tol)
+
+// Butterfly: XAB≈0.786, ABC=0.382-0.886, BCD=1.618-2.618, XAD=1.27-1.618
+isButterfly(xab, abc, bcd, xad) =>
+    inRange(xab, 0.786, fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.618 + fib_tol) and
+     (xad >= 1.27  - fib_tol) and (xad <= 1.618 + fib_tol)
+
+// Crab: XAB=0.382-0.618, ABC=0.382-0.886, BCD=2.618-3.618, XAD≈1.618
+isCrab(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 0.382 - fib_tol) and (abc <= 0.886 + fib_tol) and
+     (bcd >= 2.618 - fib_tol) and (bcd <= 3.618 + fib_tol) and
+     inRange(xad, 1.618, fib_tol)
+
+// Shark: XAB=0.382-0.618, ABC=1.13-1.618, BCD=1.618-2.24, XAD=0.886-1.13
+isShark(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 1.13  - fib_tol) and (abc <= 1.618 + fib_tol) and
+     (bcd >= 1.618 - fib_tol) and (bcd <= 2.24  + fib_tol) and
+     (xad >= 0.886 - fib_tol) and (xad <= 1.13  + fib_tol)
+
+// Cypher: XAB=0.382-0.618, ABC=1.13-1.414, BCD=1.272-2.00, XAD≈0.786
+isCypher(xab, abc, bcd, xad) =>
+    (xab >= 0.382 - fib_tol) and (xab <= 0.618 + fib_tol) and
+     (abc >= 1.13  - fib_tol) and (abc <= 1.414 + fib_tol) and
+     (bcd >= 1.272 - fib_tol) and (bcd <= 2.00  + fib_tol) and
+     inRange(xad, 0.786, fib_tol)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 4 — VPA (VOLUME PRICE ANALYSIS)
+// ═══════════════════════════════════════════════════════════
+vol_ma       = ta.sma(volume, vol_ma_len)
+vol_ratio    = volume / vol_ma
+is_vol_spike = vol_ratio >= vol_spike_mult
+is_bull_vol  = close > open and is_vol_spike   // Bullish spike
+is_bear_vol  = close < open and is_vol_spike   // Bearish spike
+is_vol_avg   = vol_ratio >= 1.0 and not is_vol_spike
+
+// Warna bar untuk volume
+barcolor_col = is_bull_vol ? color.new(color.lime, 20) :
+               is_bear_vol ? color.new(color.red,  20) :
+               is_vol_avg  ? color.new(color.gray, 50) :
+               color.new(color.gray, 80)
+
+if show_vpa and show_vol_bars
+    barcolor(barcolor_col)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5 — SMC: ORDER BLOCK DETECTION
+// ═══════════════════════════════════════════════════════════
+// Order Block = last candle berlawanan sebelum impulse move
+// Bullish OB = last bearish candle sebelum impulse naik
+// Bearish OB = last bullish candle sebelum impulse turun
+
+var float ob_bull_top = na
+var float ob_bull_bot = na
+var int   ob_bull_bar = na
+var float ob_bear_top = na
+var float ob_bear_bot = na
+var int   ob_bear_bar = na
+
+// Impulse: candle lebih besar dari rata-rata ATR
+atr14      = ta.atr(14)
+bull_impls = close > open and (close - open) > atr14 * 0.5
+bear_impls = close < open and (open - close) > atr14 * 0.5
+
+// Cek candle sebelumnya berlawanan arah
+if bull_impls and close[1] < open[1]
+    ob_bull_top := high[1]
+    ob_bull_bot := low[1]
+    ob_bull_bar := bar_index[1]
+
+if bear_impls and close[1] > open[1]
+    ob_bear_top := high[1]
+    ob_bear_bot := low[1]
+    ob_bear_bar := bar_index[1]
+
+// Invalidate OB jika harga sudah menembus jauh melewatinya
+if not na(ob_bull_bar) and close < ob_bull_bot - atr14
+    ob_bull_bar := na
+    ob_bull_top := na
+    ob_bull_bot := na
+
+if not na(ob_bear_bar) and close > ob_bear_top + atr14
+    ob_bear_bar := na
+    ob_bear_top := na
+    ob_bear_bot := na
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6 — SMC: BOS / CHoCH DETECTION
+// ═══════════════════════════════════════════════════════════
+var float lastSwingHigh    = na
+var float lastSwingLow     = na
+var int   lastSHBar        = na
+var int   lastSLBar        = na
+var bool  prevBullishStruct = false
+
+if not na(ph)
+    lastSwingHigh := ph
+    lastSHBar     := bar_index[length]
+if not na(pl)
+    lastSwingLow  := pl
+    lastSLBar     := bar_index[length]
+
+// BOS: harga break structure yang sudah terbentuk
+bull_bos = not na(lastSwingHigh) and ta.crossover(close,  lastSwingHigh)
+bear_bos = not na(lastSwingLow)  and ta.crossunder(close, lastSwingLow)
+
+// CHoCH: ganti arah struktur (lebih signifikan dari BOS)
+choch_bear = bull_bos and not prevBullishStruct  // dari bearish → break high = CHoCH bear-to-bull? 
+choch_bull = bear_bos and prevBullishStruct       // dari bullish → break low = CHoCH bull-to-bear
+
+if bull_bos
+    prevBullishStruct := true
+if bear_bos
+    prevBullishStruct := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 7 — WINRATE TRACKER
+// ═══════════════════════════════════════════════════════════
+var int total_signals   = 0,  total_wins    = 0
+var int gartley_total   = 0,  gartley_win   = 0
+var int bat_total       = 0,  bat_win       = 0
+var int butterfly_total = 0,  butterfly_win = 0
+var int crab_total      = 0,  crab_win      = 0
+var int shark_total     = 0,  shark_win     = 0
+var int cypher_total    = 0,  cypher_win    = 0
+
+var float  track_tp      = na
+var float  track_sl      = na
+var bool   track_active  = false
+var bool   track_bearish = false
+var string track_pattern = ""
+
+f_addWin(pat) =>
+    total_wins += 1
+    if pat == "Gartley"
+        gartley_win += 1
+    else if pat == "Bat"
+        bat_win += 1
+    else if pat == "Butterfly"
+        butterfly_win += 1
+    else if pat == "Crab"
+        crab_win += 1
+    else if pat == "Shark"
+        shark_win += 1
+    else if pat == "Cypher"
+        cypher_win += 1
+
+if track_active
+    if track_bearish
+        if low <= track_tp
+            f_addWin(track_pattern)
+            track_active := false
+        else if high >= track_sl
+            track_active := false
+    else
+        if high >= track_tp
+            f_addWin(track_pattern)
+            track_active := false
+        else if low <= track_sl
+            track_active := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 8 — STATE VARIABLES
+// ═══════════════════════════════════════════════════════════
+var bool   isAreaActive  = false
+var float  zoneTop       = na
+var float  zoneBot       = na
+var string patternName   = "Unconfirmed"
+var color  patternCol    = color.gray
+var float  saved_tp      = na
+var float  saved_sl      = na
+var int    signal_score  = 0
+
+// Mitigasi area
+if isAreaActive and not na(zoneBot) and not na(zoneTop)
+    if high >= zoneBot and low <= zoneTop
+        isAreaActive := false
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 9 — VISUAL OBJECTS
+// ═══════════════════════════════════════════════════════════
+
+// XABCD Labels
+var label lblX = label.new(na, na, "X", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblA = label.new(na, na, "A", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblB = label.new(na, na, "B", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblC = label.new(na, na, "C", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+var label lblD = label.new(na, na, "D", xloc=xloc.bar_index, style=label.style_none, size=size.normal)
+
+// XABCD Lines (ZigZag)
+var line lineXA = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineAB = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineBC = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+var line lineCD = line.new(na, na, na, na, xloc=xloc.bar_index, width=2)
+
+// Zone, TP, SL
+var box   zoneBox  = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.gray,100), border_color=color.new(color.gray,100))
+var line  lineTP   = line.new(na, na, na, na, xloc=xloc.bar_index, style=line.style_dashed, width=2, color=color.green)
+var line  lineSL   = line.new(na, na, na, na, xloc=xloc.bar_index, style=line.style_dashed, width=2, color=color.red)
+var label lblPatt  = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_label_down, size=size.normal)
+var label txtEntry = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.small)
+var label txtTP    = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.small)
+var label txtSL    = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.small)
+var label lblScore = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_label_right, size=size.small)
+var label lblVPA   = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.tiny)
+
+// SMC: Order Block Boxes
+var box obBullBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.green, 80), border_color=color.new(color.green, 40), border_width=1)
+var box obBearBox = box.new(na, na, na, na, xloc=xloc.bar_index, bgcolor=color.new(color.red,   80), border_color=color.new(color.red,   40), border_width=1)
+var label lblOBBull = label.new(na, na, "OB", xloc=xloc.bar_index, style=label.style_none, size=size.tiny, textcolor=color.green)
+var label lblOBBear = label.new(na, na, "OB", xloc=xloc.bar_index, style=label.style_none, size=size.tiny, textcolor=color.red)
+
+// SMC: BOS / CHoCH
+var line  lineBOS = line.new(na, na, na, na, xloc=xloc.bar_index, width=1, style=line.style_dotted)
+var label lblBOS  = label.new(na, na, "",    xloc=xloc.bar_index, style=label.style_none, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 10 — TABLES
+// ═══════════════════════════════════════════════════════════
+var table fibTable = table.new(position.top_right,    3, 7, bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+var table winTable = table.new(position.top_left,     3, 9, bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+var table smcTable = table.new(position.bottom_right, 2, 6, bgcolor=color.new(color.black,70), border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 11 — BOS / CHoCH VISUAL (independen)
+// ═══════════════════════════════════════════════════════════
+if show_smc and show_bos
+    if bull_bos or choch_bear
+        bos_label = choch_bear ? "CHoCH ▲" : "BOS ▲"
+        bos_c     = choch_bear ? color.orange : color.lime
+        bos_level = not na(lastSwingHigh) ? lastSwingHigh : close
+        line.set_xy1(lineBOS, bar_index - 1, bos_level)
+        line.set_xy2(lineBOS, bar_index,     bos_level)
+        line.set_color(lineBOS, bos_c)
+        label.set_xy(lblBOS, bar_index, bos_level)
+        label.set_text(lblBOS, bos_label)
+        label.set_textcolor(lblBOS, bos_c)
+    else if bear_bos or choch_bull
+        bos_label = choch_bull ? "CHoCH ▼" : "BOS ▼"
+        bos_c     = choch_bull ? color.orange : color.red
+        bos_level = not na(lastSwingLow) ? lastSwingLow : close
+        line.set_xy1(lineBOS, bar_index - 1, bos_level)
+        line.set_xy2(lineBOS, bar_index,     bos_level)
+        line.set_color(lineBOS, bos_c)
+        label.set_xy(lblBOS, bar_index, bos_level)
+        label.set_text(lblBOS, bos_label)
+        label.set_textcolor(lblBOS, bos_c)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 12 — ORDER BLOCK VISUAL (independen)
+// ═══════════════════════════════════════════════════════════
+if show_smc and show_ob
+    if not na(ob_bull_bar)
+        box.set_lefttop(obBullBox,     ob_bull_bar, ob_bull_top)
+        box.set_rightbottom(obBullBox, bar_index,   ob_bull_bot)
+        label.set_xy(lblOBBull, ob_bull_bar, ob_bull_top)
+        label.set_text(lblOBBull, "OB+")
+    else
+        box.set_lefttop(obBullBox,     na, na)
+        box.set_rightbottom(obBullBox, na, na)
+        label.set_text(lblOBBull, "")
+
+    if not na(ob_bear_bar)
+        box.set_lefttop(obBearBox,     ob_bear_bar, ob_bear_top)
+        box.set_rightbottom(obBearBox, bar_index,   ob_bear_bot)
+        label.set_xy(lblOBBear, ob_bear_bar, ob_bear_top)
+        label.set_text(lblOBBear, "OB-")
+    else
+        box.set_lefttop(obBearBox,     na, na)
+        box.set_rightbottom(obBearBox, na, na)
+        label.set_text(lblOBBear, "")
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 13 — PIVOT VALUES
+// ═══════════════════════════════════════════════════════════
+X      = array.get(p_vals,  4)
+X_b    = array.get(p_bars,  4)
+X_type = array.get(p_types, 4)
+A      = array.get(p_vals,  3)
+A_b    = array.get(p_bars,  3)
+A_type = array.get(p_types, 3)
+B      = array.get(p_vals,  2)
+B_b    = array.get(p_bars,  2)
+B_type = array.get(p_types, 2)
+C      = array.get(p_vals,  1)
+C_b    = array.get(p_bars,  1)
+C_type = array.get(p_types, 1)
+D      = array.get(p_vals,  0)
+D_b    = array.get(p_bars,  0)
+D_type = array.get(p_types, 0)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 14 — MAIN HARMONIC LOGIC
+// ═══════════════════════════════════════════════════════════
+allValid   = not na(X) and not na(A) and not na(B) and not na(C) and not na(D)
+orderValid = allValid and (X_b < A_b) and (A_b < B_b) and (B_b < C_b) and (C_b < D_b)
+altValid   = orderValid and (X_type != A_type) and (A_type != B_type) and (B_type != C_type) and (C_type != D_type)
+
+if altValid
+    offset    = ta.atr(14) * 0.5
+    isBearish = (D_type == 1)
+
+    xa  = math.abs(X - A)
+    ab  = math.abs(A - B)
+    bc  = math.abs(B - C)
+    cd  = math.abs(C - D)
+    xd  = math.abs(X - D)
+
+    xab = xa == 0 ? 0.0 : ab / xa
+    abc = ab == 0 ? 0.0 : bc / ab
+    bcd = bc == 0 ? 0.0 : cd / bc
+    xad = xa == 0 ? 0.0 : xd / xa
+
+    // ── Deteksi Pola ──────────────────────────
+    string detectedName    = ""
+    string detectedPattern = ""
+
+    if show_gartley and isGartley(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Gartley" : "Bullish Gartley"
+        detectedPattern := "Gartley"
+    else if show_bat and isBat(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Bat" : "Bullish Bat"
+        detectedPattern := "Bat"
+    else if show_butterfly and isButterfly(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Butterfly" : "Bullish Butterfly"
+        detectedPattern := "Butterfly"
+    else if show_crab and isCrab(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Crab" : "Bullish Crab"
+        detectedPattern := "Crab"
+    else if show_shark and isShark(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Shark" : "Bullish Shark"
+        detectedPattern := "Shark"
+    else if show_cypher and isCypher(xab, abc, bcd, xad)
+        detectedName    := isBearish ? "Bearish Cypher" : "Bullish Cypher"
+        detectedPattern := "Cypher"
+    else
+        detectedName    := isBearish ? "Bearish (Unconfirmed)" : "Bullish (Unconfirmed)"
+        detectedPattern := ""
+
+    // ── Deteksi Warna ─────────────────────────
+    color detectedCol = color.gray
+    if show_gartley and isGartley(xab, abc, bcd, xad)
+        detectedCol := col_gartley
+    else if show_bat and isBat(xab, abc, bcd, xad)
+        detectedCol := col_bat
+    else if show_butterfly and isButterfly(xab, abc, bcd, xad)
+        detectedCol := col_butterfly
+    else if show_crab and isCrab(xab, abc, bcd, xad)
+        detectedCol := col_crab
+    else if show_shark and isShark(xab, abc, bcd, xad)
+        detectedCol := col_shark
+    else if show_cypher and isCypher(xab, abc, bcd, xad)
+        detectedCol := col_cypher
+
+    // ── Update State saat D baru ──────────────
+    if D != D[1] or D_b != D_b[1]
+        patternName  := detectedName
+        patternCol   := detectedCol
+        isAreaActive := true
+        zoneTop      := D * (1 + zone_buffer)
+        zoneBot      := D * (1 - zone_buffer)
+
+        // TP/SL Scalping: lebih ketat dari swing trading
+        // TP = 0.382 dari CD | SL = 0.20 dari AD
+        saved_tp := isBearish ? D - cd * 0.382 : D + cd * 0.382
+        saved_sl := isBearish ? D + math.abs(A - D) * 0.20 : D - math.abs(A - D) * 0.20
+
+        // ── Signal Score Calculation (max 5) ───
+        score = 0
+
+        // +1: Pola harmonic valid (bukan unconfirmed)
+        if detectedPattern != ""
+            score += 1
+
+        // +1: Price di dalam Order Block
+        if show_smc and show_ob
+            if isBearish and not na(ob_bear_top)
+                if D >= ob_bear_bot and D <= ob_bear_top
+                    score += 1
+            else if not isBearish and not na(ob_bull_top)
+                if D >= ob_bull_bot and D <= ob_bull_top
+                    score += 1
+
+        // +1: Volume spike searah dengan pola
+        if show_vpa
+            if isBearish and is_bear_vol
+                score += 1
+            else if not isBearish and is_bull_vol
+                score += 1
+
+        // +1: BOS atau CHoCH searah dengan bias pola
+        if show_smc and show_bos
+            if isBearish and (bear_bos or choch_bull)
+                score += 1
+            else if not isBearish and (bull_bos or choch_bear)
+                score += 1
+
+        // +1: Volume di atas rata-rata (minimal 1.2x)
+        if vol_ratio >= 1.2
+            score += 1
+
+        signal_score := score
+
+        // ── Statistik ─────────────────────────
+        if detectedPattern != ""
+            total_signals += 1
+            if detectedPattern == "Gartley"
+                gartley_total += 1
+            else if detectedPattern == "Bat"
+                bat_total += 1
+            else if detectedPattern == "Butterfly"
+                butterfly_total += 1
+            else if detectedPattern == "Crab"
+                crab_total += 1
+            else if detectedPattern == "Shark"
+                shark_total += 1
+            else if detectedPattern == "Cypher"
+                cypher_total += 1
+
+            track_tp      := saved_tp
+            track_sl      := saved_sl
+            track_active  := true
+            track_bearish := isBearish
+            track_pattern := detectedPattern
+
+    box_right = D_b + box_width
+
+    // ── Update Labels XABCD ──────────────────
+    label.set_textcolor(lblX, patternCol)
+    label.set_textcolor(lblA, patternCol)
+    label.set_textcolor(lblB, patternCol)
+    label.set_textcolor(lblC, patternCol)
+    label.set_textcolor(lblD, patternCol)
+
+    label.set_xy(lblX, X_b, X_type == 1 ? X + offset : X - offset)
+    label.set_xy(lblA, A_b, A_type == 1 ? A + offset : A - offset)
+    label.set_xy(lblB, B_b, B_type == 1 ? B + offset : B - offset)
+    label.set_xy(lblC, C_b, C_type == 1 ? C + offset : C - offset)
+    label.set_xy(lblD, D_b, D_type == 1 ? D + offset : D - offset)
+
+    // ── Update Garis ZigZag ──────────────────
+    line.set_xy1(lineXA, X_b, X), line.set_xy2(lineXA, A_b, A), line.set_color(lineXA, patternCol)
+    line.set_xy1(lineAB, A_b, A), line.set_xy2(lineAB, B_b, B), line.set_color(lineAB, patternCol)
+    line.set_xy1(lineBC, B_b, B), line.set_xy2(lineBC, C_b, C), line.set_color(lineBC, patternCol)
+    line.set_xy1(lineCD, C_b, C), line.set_xy2(lineCD, D_b, D), line.set_color(lineCD, patternCol)
+
+    // ── Render Area Aktif ────────────────────
+    if isAreaActive
+        // Zone box
+        box.set_lefttop(zoneBox,     D_b,       zoneTop)
+        box.set_rightbottom(zoneBox, box_right,  zoneBot)
+        box.set_bgcolor(zoneBox,     isBearish ? color.new(color.red,   85) : color.new(color.green, 85))
+        box.set_border_color(zoneBox,isBearish ? color.red : color.green)
+
+        // TP Line
+        line.set_color(lineTP, color.green)
+        line.set_xy1(lineTP, D_b,       saved_tp)
+        line.set_xy2(lineTP, box_right, saved_tp)
+
+        // SL Line
+        line.set_color(lineSL, color.red)
+        line.set_xy1(lineSL, D_b,       saved_sl)
+        line.set_xy2(lineSL, box_right, saved_sl)
+
+        // Pattern label
+        label.set_xy(lblPatt, D_b, isBearish ? zoneTop + offset : zoneBot - offset)
+        label.set_text(lblPatt,  patternName)
+        label.set_color(lblPatt, patternCol)
+        label.set_textcolor(lblPatt, color.white)
+        label.set_style(lblPatt, isBearish ? label.style_label_down : label.style_label_up)
+
+        // Entry, TP, SL text labels
+        label.set_xy(txtEntry, box_right, D)
+        label.set_text(txtEntry, isBearish ? "◀ SELL" : "◀ BUY")
+        label.set_textcolor(txtEntry, isBearish ? color.red : color.green)
+
+        label.set_xy(txtTP, box_right, saved_tp)
+        label.set_text(txtTP, "TP  " + str.tostring(saved_tp, "#.####"))
+        label.set_textcolor(txtTP, color.green)
+
+        label.set_xy(txtSL, box_right, saved_sl)
+        label.set_text(txtSL, "SL  " + str.tostring(saved_sl, "#.####"))
+        label.set_textcolor(txtSL, color.red)
+
+        // ── Signal Quality Score ──────────────
+        score_txt = signal_score >= 4 ? "⭐ STRONG (" + str.tostring(signal_score) + "/5)" :
+                    signal_score >= 2 ? "🔸 MEDIUM (" + str.tostring(signal_score) + "/5)" :
+                                        "⚠️ WEAK (" + str.tostring(signal_score) + "/5)"
+        score_bg  = signal_score >= 4 ? color.new(color.green,  50) :
+                    signal_score >= 2 ? color.new(color.yellow, 50) :
+                                        color.new(color.red,    70)
+
+        label.set_xy(lblScore, D_b, isBearish ? zoneTop + offset * 3.5 : zoneBot - offset * 3.5)
+        label.set_text(lblScore,    score_txt)
+        label.set_color(lblScore,   score_bg)
+        label.set_textcolor(lblScore, color.white)
+        label.set_style(lblScore,   label.style_label_right)
+
+        // ── VPA Konfirmasi Label ──────────────
+        if show_vpa
+            vpa_txt = is_vol_spike ? (is_bull_vol ? "🟢 VOL SPIKE ▲ " + str.tostring(vol_ratio, "#.##") + "x" :
+                                                     "🔴 VOL SPIKE ▼ " + str.tostring(vol_ratio, "#.##") + "x") :
+                      vol_ratio >= 1.0 ? "🔵 VOL Normal " + str.tostring(vol_ratio, "#.##") + "x" :
+                                         "⚪ VOL Lemah "  + str.tostring(vol_ratio, "#.##") + "x"
+            vpa_c   = is_vol_spike ? (is_bull_vol ? color.lime : color.red) :
+                      vol_ratio >= 1.0 ? color.aqua : color.gray
+
+            label.set_xy(lblVPA, D_b, isBearish ? zoneTop + offset * 6 : zoneBot - offset * 6)
+            label.set_text(lblVPA,     vpa_txt)
+            label.set_textcolor(lblVPA, vpa_c)
+            label.set_style(lblVPA, label.style_none)
+
+    else
+        // Sembunyikan semua elemen kalau area tidak aktif
+        box.set_bgcolor(zoneBox,      color.new(color.gray, 100))
+        box.set_border_color(zoneBox, color.new(color.gray, 100))
+        line.set_color(lineTP, color.new(color.green, 100))
+        line.set_color(lineSL, color.new(color.red,   100))
+        label.set_text(lblPatt,  "")
+        label.set_text(txtEntry, "")
+        label.set_text(txtTP,    "")
+        label.set_text(txtSL,    "")
+        label.set_text(lblScore, "")
+        label.set_text(lblVPA,   "")
+
+    // ═════════════════════════════════════════
+    // SECTION 15 — FIBONACCI TABLE (top right)
+    // ═════════════════════════════════════════
+    bool v_xab = inRange(xab, 0.618, fib_tol) or inRange(xab, 0.786, fib_tol) or (xab >= 0.382 - fib_tol and xab <= 0.618 + fib_tol)
+    bool v_abc = abc >= 0.382 - fib_tol and abc <= 0.886 + fib_tol
+    bool v_bcd = bcd >= 1.13  - fib_tol and bcd <= 3.618 + fib_tol
+    bool v_xad = xad >= 0.786 - fib_tol and xad <= 1.618 + fib_tol
+
+    color hdr_bg  = color.new(patternCol, 40)
+    color foot_bg = color.new(patternCol, 60)
+
+    table.cell(fibTable, 0, 0, "Leg",   text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 1, 0, "Ratio", text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 2, 0, "✓/✗",   text_color=color.white,  text_size=size.small, bgcolor=hdr_bg)
+    table.cell(fibTable, 0, 1, "XAB",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 1, str.tostring(xab, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 1, v_xab ? "✓" : "✗", text_color=v_xab ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 2, "ABC",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 2, str.tostring(abc, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 2, v_abc ? "✓" : "✗", text_color=v_abc ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 3, "BCD",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 3, str.tostring(bcd, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 3, v_bcd ? "✓" : "✗", text_color=v_bcd ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 4, "XAD",   text_color=color.white,  text_size=size.small)
+    table.cell(fibTable, 1, 4, str.tostring(xad, "#.###"), text_color=color.white, text_size=size.small)
+    table.cell(fibTable, 2, 4, v_xad ? "✓" : "✗", text_color=v_xad ? color.green : color.red, text_size=size.small)
+    table.cell(fibTable, 0, 5, "Score",  text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 1, 5, str.tostring(signal_score) + "/5", text_color=signal_score >= 4 ? color.lime : signal_score >= 2 ? color.yellow : color.red, text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 2, 5, "",       text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 0, 6, "Pola",   text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 1, 6, patternName, text_color=patternCol, text_size=size.small, bgcolor=foot_bg)
+    table.cell(fibTable, 2, 6, "",       text_color=color.white,  text_size=size.small, bgcolor=foot_bg)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 16 — SMC + VPA TABLE (bottom right)
+// ═══════════════════════════════════════════════════════════
+if show_smc or show_vpa
+    vol_str     = str.tostring(vol_ratio, "#.##") + "x"
+    vol_col_tbl = is_vol_spike ? color.lime : vol_ratio >= 1.0 ? color.yellow : color.gray
+    ob_bull_s   = not na(ob_bull_bar) ? "✓ Aktif" : "–"
+    ob_bear_s   = not na(ob_bear_bar) ? "✓ Aktif" : "–"
+    bos_s       = bull_bos  ? "BOS ▲"   : bear_bos  ? "BOS ▼"   :
+                  choch_bear ? "CHoCH ▲" : choch_bull ? "CHoCH ▼" : "–"
+    bos_col_tbl = bull_bos or choch_bear ? color.lime : bear_bos or choch_bull ? color.red : color.gray
+    vpa_s       = is_bull_vol ? "Spike ▲" : is_bear_vol ? "Spike ▼" : vol_ratio >= 1.0 ? "Normal" : "Lemah"
+    vpa_col_tbl = is_bull_vol ? color.lime : is_bear_vol ? color.red : vol_ratio >= 1.0 ? color.yellow : color.gray
+
+    smc_hdr = color.new(color.navy, 20)
+    table.cell(smcTable, 0, 0, "SMC / VPA", text_color=color.white,  text_size=size.small, bgcolor=smc_hdr)
+    table.cell(smcTable, 1, 0, "Status",    text_color=color.white,  text_size=size.small, bgcolor=smc_hdr)
+    table.cell(smcTable, 0, 1, "BOS/CHoCH", text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 1, bos_s,       text_color=bos_col_tbl,  text_size=size.small)
+    table.cell(smcTable, 0, 2, "OB Bullish",text_color=color.green,  text_size=size.small)
+    table.cell(smcTable, 1, 2, ob_bull_s,   text_color=color.green,  text_size=size.small)
+    table.cell(smcTable, 0, 3, "OB Bearish",text_color=color.red,    text_size=size.small)
+    table.cell(smcTable, 1, 3, ob_bear_s,   text_color=color.red,    text_size=size.small)
+    table.cell(smcTable, 0, 4, "Volume",     text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 4, vol_str,      text_color=vol_col_tbl,  text_size=size.small)
+    table.cell(smcTable, 0, 5, "VPA",        text_color=color.white,  text_size=size.small)
+    table.cell(smcTable, 1, 5, vpa_s,        text_color=vpa_col_tbl,  text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 17 — WINRATE TABLE (top left)
+// ═══════════════════════════════════════════════════════════
+wr_total     = total_signals   == 0 ? 0.0 : total_wins     / total_signals   * 100
+wr_gartley   = gartley_total   == 0 ? 0.0 : gartley_win    / gartley_total   * 100
+wr_bat       = bat_total       == 0 ? 0.0 : bat_win        / bat_total       * 100
+wr_butterfly = butterfly_total == 0 ? 0.0 : butterfly_win  / butterfly_total * 100
+wr_crab      = crab_total      == 0 ? 0.0 : crab_win       / crab_total      * 100
+wr_shark     = shark_total     == 0 ? 0.0 : shark_win      / shark_total     * 100
+wr_cypher    = cypher_total    == 0 ? 0.0 : cypher_win     / cypher_total    * 100
+
+wrColor(wr) =>
+    wr >= 60 ? color.green : wr >= 40 ? color.yellow : color.red
+
+win_hdr = color.new(color.navy, 20)
+
+table.cell(winTable, 0, 0, "Pola",     text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 1, 0, "Signal",   text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+table.cell(winTable, 2, 0, "WinRate",  text_color=color.white, text_size=size.small, bgcolor=win_hdr)
+
+table.cell(winTable, 0, 1, "Semua",    text_color=color.white, text_size=size.small)
+table.cell(winTable, 1, 1, str.tostring(total_signals),  text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 1, str.tostring(wr_total,  "#.#") + "%", text_color=wrColor(wr_total), text_size=size.small)
+
+table.cell(winTable, 0, 2, "Gartley",  text_color=col_gartley, text_size=size.small)
+table.cell(winTable, 1, 2, str.tostring(gartley_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 2, str.tostring(wr_gartley,  "#.#") + "%", text_color=wrColor(wr_gartley), text_size=size.small)
+
+table.cell(winTable, 0, 3, "Bat",      text_color=col_bat,     text_size=size.small)
+table.cell(winTable, 1, 3, str.tostring(bat_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 3, str.tostring(wr_bat,      "#.#") + "%", text_color=wrColor(wr_bat), text_size=size.small)
+
+table.cell(winTable, 0, 4, "Butterfly",text_color=col_butterfly,text_size=size.small)
+table.cell(winTable, 1, 4, str.tostring(butterfly_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 4, str.tostring(wr_butterfly,"#.#") + "%", text_color=wrColor(wr_butterfly), text_size=size.small)
+
+table.cell(winTable, 0, 5, "Crab",     text_color=col_crab,    text_size=size.small)
+table.cell(winTable, 1, 5, str.tostring(crab_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 5, str.tostring(wr_crab,     "#.#") + "%", text_color=wrColor(wr_crab), text_size=size.small)
+
+table.cell(winTable, 0, 6, "Shark",    text_color=col_shark,   text_size=size.small)
+table.cell(winTable, 1, 6, str.tostring(shark_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 6, str.tostring(wr_shark,    "#.#") + "%", text_color=wrColor(wr_shark), text_size=size.small)
+
+table.cell(winTable, 0, 7, "Cypher",   text_color=col_cypher,  text_size=size.small)
+table.cell(winTable, 1, 7, str.tostring(cypher_total), text_color=color.white, text_size=size.small)
+table.cell(winTable, 2, 7, str.tostring(wr_cypher,   "#.#") + "%", text_color=wrColor(wr_cypher), text_size=size.small)
+
+table.cell(winTable, 0, 8, "TP=0.382CD | SL=0.20AD", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))
+table.cell(winTable, 1, 8, "", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))
+table.cell(winTable, 2, 8, "", text_color=color.gray, text_size=size.tiny, bgcolor=color.new(color.black, 60))

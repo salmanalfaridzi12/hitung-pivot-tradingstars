@@ -65,6 +65,52 @@ class ErrorBoundary extends React.Component {
 }
 
 // --- Main Component -----------------------------------------------------------
+// --- 3D Magnetic Tilt Hook (lightweight, zero-dependency) --------------------
+function useTilt(max = 5) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof window === "undefined") return;
+    const fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!fine || reduced) return;
+
+    let raf = 0, tX = 0, tY = 0, cX = 0, cY = 0, active = false;
+    const render = () => {
+      cX += (tX - cX) * 0.12;
+      cY += (tY - cY) * 0.12;
+      // perspective baked in -> self-contained, correct vanishing point, no ancestor needed
+      el.style.transform = `perspective(1600px) rotateX(${cY.toFixed(2)}deg) rotateY(${cX.toFixed(2)}deg)`;
+      if (active || Math.abs(tX - cX) > 0.01 || Math.abs(tY - cY) > 0.01) {
+        raf = requestAnimationFrame(render);
+      } else {
+        raf = 0;
+      }
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(render); };
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      tX = (px - 0.5) * 2 * max;      // rotateY (left/right)
+      tY = -(py - 0.5) * 2 * max;     // rotateX (up/down, inverted)
+      active = true;
+      kick();
+    };
+    const onLeave = () => { tX = 0; tY = 0; active = false; kick(); };
+
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [max]);
+  return ref;
+}
+
 export default function PivotAnalyzer() {
   // -- State: OHLC Inputs
   const [stockCode, setStockCode] = useState("");
@@ -88,6 +134,24 @@ export default function PivotAnalyzer() {
   const [tab, setTab] = useState("main");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+
+  // -- Lebar zona entry (% dari rentang pivot R1–S1), bisa diatur user
+  const [zonePct, setZonePct] = useState(6);
+
+  // -- Kalkulator posisi (modal & risiko per trade)
+  const [capital, setCapital] = useState("");
+  const [riskPct, setRiskPct] = useState(2);
+
+  // -- AI (Gemini) analysis state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiData, setAiData] = useState(null);        // hasil analisa terstruktur
+  const [aiTyped, setAiTyped] = useState("");         // narasi yang sedang "diketik"
+  const [aiError, setAiError] = useState(null);
+  const [aiAt, setAiAt] = useState(null);             // timestamp analisa
+  const [aiCached, setAiCached] = useState(false);    // hasil dari cache?
+  const [aiCopied, setAiCopied] = useState(false);    // feedback tombol salin
+  const [autoAi, setAutoAi] = useState(true);         // auto-analisa setelah hitung (default ON)
+  const aiCacheRef = useRef(new Map());               // cache per (saham + OHLC)
   const [history, setHistory] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [pattern, setPattern] = useState(null);
@@ -154,6 +218,18 @@ export default function PivotAnalyzer() {
     return Math.abs(reward / risk).toFixed(2);
   }, [result, currentPrice, close]);
 
+  // --- Derived: Entry Zone — berbasis pivot (rentang R1–S1) & bisa diatur user ---
+  const entryZone = useMemo(() => {
+    if (!result) return null;
+    const anchor = parseFloat(currentPrice) || parseFloat(close);
+    if (isNaN(anchor) || anchor <= 0) return null;
+    const pct = Math.max(1, Math.min(25, parseFloat(zonePct) || 6));
+    const pivotRange = result.R1 - result.S1;
+    // setengah-lebar zona = persen × rentang pivot (fallback ke 2% harga bila perlu)
+    const half = (pivotRange > 0 ? pivotRange : anchor * 0.02) * (pct / 100);
+    return { low: Math.round(anchor - half), high: Math.round(anchor + half) };
+  }, [result, currentPrice, close, zonePct]);
+
   // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
     console.log(`DEBUG: Calculating pivot for H:${h}, L:${l}, C:${c}`);
@@ -168,6 +244,121 @@ export default function PivotAnalyzer() {
       S3: Math.round(l - 2 * (h - p)),
     };
   };
+
+  // Minta analisa LLM (Gemini) dari data pivot yang sudah dihitung
+  const handleAiAnalyze = async () => {
+    if (!result) return;
+    // Cache per kombinasi saham + OHLC + pivot → hemat panggil API berulang
+    const cacheKey = `${stockCode}|${high}|${low}|${close}|${currentPrice}|${result.PP}`;
+    const cached = aiCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAiError(null);
+      setAiCached(true);
+      setAiAt(new Date());
+      setAiData(cached);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+    setAiData(null);
+    setAiTyped("");
+    setAiCached(false);
+    try {
+      const res = await fetch("/api/ai-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stockCode,
+          timeframe,
+          currentPrice,
+          ohlc: { open, high, low, close, volume, ma20Volume, ma20Price },
+          pivots: result,
+          pattern: pattern ? `${pattern.name} — ${pattern.description}` : null,
+          confluence: confluence ? confluence.text : null,
+          rrr: calcRRR ? `1 : ${calcRRR}` : null,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        aiCacheRef.current.set(cacheKey, data.analysis);
+        // Simpan ke localStorage (cap 30 entri terbaru) supaya tahan reload & hemat kuota
+        try {
+          const entries = Array.from(aiCacheRef.current.entries()).slice(-30);
+          aiCacheRef.current = new Map(entries);
+          localStorage.setItem("pivot_ai_cache", JSON.stringify(Object.fromEntries(entries)));
+        } catch { /* localStorage penuh/ditolak — abaikan */ }
+        setAiAt(new Date());
+        setAiData(data.analysis);
+      } else {
+        setAiError(data.error || "Gagal menganalisa.");
+      }
+    } catch {
+      setAiError("Koneksi gagal. Coba lagi.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Susun teks analisa untuk Salin / Bagikan
+  const buildAiText = () => {
+    const d = aiData;
+    if (!d) return "";
+    return [
+      `📊 Analisa AI — ${stockCode || "Saham"} (${timeframe})`,
+      `Sentiment: ${d.sentiment}${d.confidence != null ? ` (${d.confidence}%)` : ""}`,
+      d.headline ? `\n${d.headline}` : "",
+      d.analysis ? `\n${d.analysis}` : "",
+      d.entry ? `\nEntry: ${d.entry}` : "",
+      d.tp ? `TP: ${d.tp}` : "",
+      d.sl ? `SL: ${d.sl}` : "",
+      d.risk ? `\nRisiko: ${d.risk}` : "",
+      d.disclaimer ? `\n${d.disclaimer}` : "",
+    ].filter(Boolean).join("\n");
+  };
+
+  const copyAi = async () => {
+    try {
+      await navigator.clipboard.writeText(buildAiText());
+      setAiCopied(true);
+      setTimeout(() => setAiCopied(false), 1800);
+    } catch { /* clipboard ditolak browser */ }
+  };
+
+  const shareAiTelegram = () => {
+    if (typeof window === "undefined") return;
+    const url = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+    const link = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(buildAiText())}`;
+    window.open(link, "_blank");
+  };
+
+  // Efek "streaming": ketik narasi analisa bertahap saat hasil baru datang
+  useEffect(() => {
+    if (!aiData?.analysis) { setAiTyped(""); return; }
+    const full = String(aiData.analysis);
+    setAiTyped("");
+    let i = 0;
+    const id = setInterval(() => {
+      i += 2; // 2 karakter per tick → mulus tapi cepat
+      setAiTyped(full.slice(0, i));
+      if (i >= full.length) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [aiData]);
+
+  // Auto-analisa setiap kali ada hasil pivot baru (bila toggle Auto aktif)
+  useEffect(() => {
+    if (autoAi && result) handleAiAnalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, autoAi]);
+
+  // Muat cache analisa AI dari localStorage saat mount (tahan reload)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pivot_ai_cache");
+      if (raw) aiCacheRef.current = new Map(Object.entries(JSON.parse(raw)));
+    } catch { /* cache rusak — abaikan */ }
+  }, []);
 
   const handleCalculate = () => {
     // Parse fresh — strip formatting characters, then convert
@@ -301,8 +492,11 @@ export default function PivotAnalyzer() {
       });
       clearTimeout(timeoutId);
 
-      const data = await res.json();
-      if (!res.ok) {
+      // /api/trading bisa balas non-JSON (mis. HTML 404 saat next dev) → parse defensif
+      let data = null;
+      try { data = await res.json(); } catch { data = null; }
+
+      if (!res.ok || !data) {
         // --- LIVE SCRAPE FALLBACK ---
         try {
           const tvRes = await fetch("/api/fallback", {
@@ -333,7 +527,7 @@ export default function PivotAnalyzer() {
         } catch (fallbackErr) {
           console.error("TV Fallback failed", fallbackErr);
         }
-        setFetchStatus({ type: "error", msg: data.detail || data.error || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
+        setFetchStatus({ type: "error", msg: (data && (data.detail || data.error)) || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
         return;
       }
 
@@ -410,9 +604,10 @@ export default function PivotAnalyzer() {
       });
       clearTimeout(timeoutId);
 
-      const data = await res.json();
+      let data = null;
+      try { data = await res.json(); } catch { data = null; }
 
-      if (!res.ok) {
+      if (!res.ok || !data) {
         try {
           const tvRes = await fetch("/api/fallback", {
             method: "POST",
@@ -501,7 +696,7 @@ export default function PivotAnalyzer() {
           console.error("TV Fallback failed", fallbackErr);
         }
 
-        setFetchStatus({ type: "error", msg: data.detail || data.error || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
+        setFetchStatus({ type: "error", msg: (data && (data.detail || data.error)) || `Emiten ${code} tidak ditemukan. Silakan Input Manual!` });
         setFetchLoading(false);
         return;
       }
@@ -820,6 +1015,8 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
   ], []);
 
   // --- Render ---------------------------------------------------------------
+  const ohlcTiltRef = useTilt(5);
+
   return (
     <main className="min-h-screen bg-[#09090b] text-white p-4 pb-24 font-sans selection:bg-purple-500/30">
 
@@ -919,7 +1116,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-6">
 
             {/* -- DATA OHLC Input Panel ---------------------------------- */}
-            <div className="bg-slate-900/40 p-6 rounded-3xl border border-white/5 backdrop-blur-xl">
+            <div ref={ohlcTiltRef} className="card-3d bg-slate-900/40 p-6 rounded-3xl border border-white/5">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                   <Target className="w-4 h-4 text-purple-500" /> DATA OHLC
@@ -1060,7 +1257,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     onClick={handleCalculate}
                     disabled={loading}
                     id="btn-hitung-pivot"
-                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-purple-900/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed group hover:shadow-purple-500/30"
+                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.2em] btn-3d transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                   >
                     {loading ? (
                       <span className="flex items-center justify-center gap-2">
@@ -1080,6 +1277,142 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
             {/* -- ANALYSIS RESULTS ---------------------------------------------------------- */}
             {result && isClient && (
               <div ref={analysisCardRef} className="space-y-5 animate-in slide-in-from-bottom-10 fade-in duration-1000">
+
+                {/* â•â• AI ANALYSIS (Gemini) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-purple-500/20 p-5">
+                  {/* Header: judul + toggle Auto + tombol Analisa */}
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-purple-400" /> Analisa AI
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setAutoAi((v) => !v)}
+                        title="Auto-analisa setiap kali Hitung Pivot"
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${autoAi ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-slate-900 border-white/10 text-slate-500'}`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${autoAi ? 'bg-purple-400 shadow-[0_0_6px_#c084fc]' : 'bg-slate-600'}`} />
+                        Auto
+                      </button>
+                      <button
+                        onClick={handleAiAnalyze}
+                        disabled={aiLoading}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95"
+                      >
+                        {aiLoading
+                          ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Menganalisa…</>
+                          : <>{aiData ? 'Ulangi' : 'Analisa AI'} <ArrowRight className="w-3.5 h-3.5" /></>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Skeleton loading */}
+                  {aiLoading && (
+                    <div className="space-y-2 animate-pulse">
+                      <div className="h-3 w-1/3 bg-slate-700/50 rounded" />
+                      <div className="h-2.5 w-full bg-slate-800/60 rounded" />
+                      <div className="h-2.5 w-5/6 bg-slate-800/60 rounded" />
+                      <div className="h-2.5 w-2/3 bg-slate-800/60 rounded" />
+                    </div>
+                  )}
+
+                  {/* Error + Coba lagi */}
+                  {!aiLoading && aiError && (
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-[11px] text-red-400 font-medium">⚠️ {aiError}</p>
+                      <button onClick={handleAiAnalyze} className="text-[10px] font-black text-purple-300 hover:text-purple-200 uppercase tracking-widest">🔄 Coba lagi</button>
+                    </div>
+                  )}
+
+                  {/* Idle */}
+                  {!aiLoading && !aiError && !aiData && (
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Klik <span className="text-purple-400 font-bold">Analisa AI</span> untuk ringkasan berbasis Gemini dari data pivot di atas{autoAi ? ' (mode Auto aktif)' : ''}.
+                    </p>
+                  )}
+
+                  {/* Hasil */}
+                  {!aiLoading && aiData && (
+                    <div className="space-y-3">
+                      {/* Sentiment + headline */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest ${
+                          aiData.sentiment === 'BULLISH' ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                          : aiData.sentiment === 'BEARISH' ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                          : 'bg-slate-500/15 text-slate-300 border border-white/10'
+                        }`}>{aiData.sentiment || 'NETRAL'}</span>
+                        <span className="text-[11px] font-black text-white flex-1 min-w-[140px]">{aiData.headline}</span>
+                      </div>
+
+                      {/* Gauge keyakinan */}
+                      {aiData.confidence != null && (() => {
+                        const conf = Math.max(0, Math.min(100, Number(aiData.confidence) || 0));
+                        const col = aiData.sentiment === 'BULLISH' ? 'from-green-500 to-emerald-400'
+                          : aiData.sentiment === 'BEARISH' ? 'from-red-500 to-rose-400'
+                          : 'from-slate-500 to-slate-400';
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                              <span>Keyakinan</span><span className="text-slate-300">{conf}%</span>
+                            </div>
+                            <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-white/5">
+                              <div className={`h-full bg-gradient-to-r ${col} rounded-full transition-all duration-700`} style={{ width: `${conf}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Narasi (efek ketik) */}
+                      {aiData.analysis && (
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          {aiTyped}
+                          {aiTyped.length < String(aiData.analysis).length && <span className="text-purple-400 animate-pulse">▋</span>}
+                        </p>
+                      )}
+
+                      {/* Chips Entry / TP / SL */}
+                      {(aiData.entry || aiData.tp || aiData.sl) && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-purple-300 mb-0.5"><TrendingUp className="w-3 h-3" /> Entry</div>
+                            <div className="text-[11px] font-black text-white break-words">{aiData.entry || '-'}</div>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
+                            <div className="text-[11px] font-black text-green-300 break-words">{aiData.tp || '-'}</div>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
+                            <div className="text-[11px] font-black text-red-300 break-words">{aiData.sl || '-'}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {aiData.keyLevels && <p className="text-[11px] text-slate-400"><span className="text-purple-400 font-bold">Level: </span>{aiData.keyLevels}</p>}
+                      {aiData.risk && <p className="text-[11px] text-amber-400/90"><span className="font-bold">Risiko: </span>{aiData.risk}</p>}
+
+                      {/* Aksi: Salin / Bagikan + timestamp */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                        <div className="flex items-center gap-2">
+                          <button onClick={copyAi} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/5 text-[10px] font-black text-slate-300 uppercase tracking-widest transition-all">
+                            {aiCopied ? <><CheckCircle2 className="w-3 h-3 text-green-400" /> Tersalin</> : <>📋 Salin</>}
+                          </button>
+                          <button onClick={shareAiTelegram} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[10px] font-black text-[#5bc0ec] uppercase tracking-widest transition-all">
+                            <Share2 className="w-3 h-3" /> Telegram
+                          </button>
+                        </div>
+                        {aiAt && (
+                          <span className="text-[9px] text-slate-600 font-mono">
+                            🕒 {aiAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}{aiCached ? ' • cache' : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {aiData.disclaimer && <p className="text-[9px] text-slate-600 pt-2 border-t border-white/5 leading-relaxed">{aiData.disclaimer}</p>}
+                    </div>
+                  )}
+                </div>
+
 
                 {/* â•â• TREND CONTEXT + RRR SUMMARY ROW â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
                 <div className="grid grid-cols-2 gap-3">
@@ -1143,17 +1476,117 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   </div>
                 </div>
 
+                {/* Kontrol lebar zona entry (berbasis rentang pivot, bisa diatur) */}
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lebar Zona Entry</span>
+                  <input
+                    type="number"
+                    value={zonePct}
+                    onChange={(e) => setZonePct(e.target.value)}
+                    min="1" max="25" step="0.5"
+                    className="w-16 bg-slate-950 border border-purple-500/30 rounded-lg px-2 py-1.5 text-sm font-black text-purple-300 text-center focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-500 font-bold">% rentang pivot (R1–S1)</span>
+                  <div className="flex gap-1">
+                    {[{ l: "Sempit", v: 3 }, { l: "Sedang", v: 6 }, { l: "Lebar", v: 12 }].map((p) => (
+                      <button
+                        key={p.v}
+                        onClick={() => setZonePct(p.v)}
+                        className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${Number(zonePct) === p.v ? "bg-purple-500/20 border-purple-500/40 text-purple-300" : "bg-slate-900 border-white/10 text-slate-500 hover:text-purple-300"}`}
+                      >
+                        {p.l}
+                      </button>
+                    ))}
+                  </div>
+                  {entryZone && (
+                    <span className="text-[10px] text-slate-400 font-mono ml-auto">≈ Rp {entryZone.low.toLocaleString("id-ID")} – {entryZone.high.toLocaleString("id-ID")}</span>
+                  )}
+                </div>
+
+                {/* Kalkulator Posisi — ukuran lot dari modal & risiko */}
+                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5">
+                  <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-4">
+                    <Calculator className="w-4 h-4 text-purple-500" /> Kalkulator Posisi
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Modal (Rp)</label>
+                      <input
+                        type="number"
+                        value={capital}
+                        onChange={(e) => setCapital(e.target.value)}
+                        placeholder="cth: 10000000"
+                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Risiko / Trade (%)</label>
+                      <input
+                        type="number"
+                        value={riskPct}
+                        onChange={(e) => setRiskPct(e.target.value)}
+                        min="0.1" max="100" step="0.5"
+                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                  {(() => {
+                    const entry = parseFloat(currentPrice) || parseFloat(close);
+                    const sl = result.S1;
+                    const cap = parseFloat(capital);
+                    const rPct = Math.max(0.1, Math.min(100, parseFloat(riskPct) || 2));
+                    const riskPerShare = entry - sl;
+                    if (isNaN(cap) || cap <= 0)
+                      return <p className="text-[11px] text-slate-500 leading-relaxed">Isi modal untuk menghitung jumlah lot yang aman sesuai risiko.</p>;
+                    if (!(riskPerShare > 0))
+                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ S1 berada di atas/sama dengan entry — belum jadi setup beli yang valid.</p>;
+                    const riskBudget = cap * (rPct / 100);
+                    const lots = Math.floor(riskBudget / riskPerShare / 100);
+                    const shares = lots * 100;
+                    const posValue = shares * entry;
+                    const potLoss = shares * riskPerShare;
+                    const potProfit = shares * (result.R1 - entry);
+                    const fmt = (n) => Math.round(n).toLocaleString("id-ID");
+                    if (lots < 1)
+                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Modal/risiko terlalu kecil untuk 1 lot di harga ini. Naikkan modal atau % risiko.</p>;
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl bg-slate-950/50 border border-purple-500/20 text-center">
+                          <div className="text-[8px] font-black text-purple-300 uppercase tracking-widest mb-0.5">Ukuran Posisi</div>
+                          <div className="text-lg font-black text-white">{fmt(lots)} <span className="text-[10px] text-slate-400">lot</span></div>
+                          <div className="text-[9px] text-slate-500">{fmt(shares)} lembar</div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-950/50 border border-white/10 text-center flex flex-col justify-center">
+                          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Nilai Posisi</div>
+                          <div className="text-base font-black text-slate-200">Rp {fmt(posValue)}</div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center flex flex-col justify-center">
+                          <div className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-0.5">Potensi Rugi (SL)</div>
+                          <div className="text-base font-black text-red-400">-Rp {fmt(potLoss)}</div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-center flex flex-col justify-center">
+                          <div className="text-[8px] font-black text-green-300 uppercase tracking-widest mb-0.5">Potensi Untung (R1)</div>
+                          <div className="text-base font-black text-green-400">+Rp {fmt(potProfit)}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">1 lot = 100 lembar. Entry pakai harga acuan, SL = S1, target = R1. Sesuaikan dengan kondisi nyata.</p>
+                </div>
+
                 {/* Visual Context (charts & broker) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <ErrorBoundary>
-                    <RiskRewardVisualizer 
-                      entry={parseFloat(currentPrice) || parseFloat(close)} 
-                      stopLoss={result.S1} 
-                      target={result.R1} 
+                    <RiskRewardVisualizer
+                      entry={parseFloat(currentPrice) || parseFloat(close)}
+                      entryLow={entryZone?.low}
+                      entryHigh={entryZone?.high}
+                      stopLoss={result.S1}
+                      target={result.R1}
                     />
                   </ErrorBoundary>
                   
-                  <div className="bg-slate-800/20 p-5 rounded-2xl border border-white/10">
+                  <div className="depth-3d bg-slate-800/20 p-5 rounded-2xl border border-white/10">
                     <div className="flex justify-between items-center mb-4">
                         <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Daily Sentiment (Pivot)</p>
                         {(() => {
@@ -1252,7 +1685,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                    }
 
                    return (
-                     <div className={`p-4 rounded-3xl border flex items-center gap-4 shadow-xl shadow-black/40 animate-in zoom-in-95 duration-500 ${sig.style}`}>
+                     <div className={`p-4 rounded-3xl border flex items-center gap-4 depth-3d animate-in zoom-in-95 duration-500 ${sig.style}`}>
                         <div className="p-3 rounded-2xl bg-slate-950/40 border border-inherit shadow-inner">
                            {sig.icon}
                         </div>
@@ -1268,11 +1701,24 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                 })()}
 
                 <ErrorBoundary>
-                  <TradingChart ohlc={{ open, high, low, close }} levels={result} pattern={pattern} />
+                  <TradingChart
+                    ohlc={{ open, high, low, close, volume }}
+                    levels={result}
+                    pattern={pattern}
+                    stockCode={stockCode}
+                    signalText={(() => {
+                      const cp = parseFloat(currentPrice || close);
+                      if (!result || isNaN(cp)) return null;
+                      const volatility = (result.R3 - result.S3) / result.S3;
+                      if (cp >= result.R2 * 0.99) return "WAIT & SEE: Take Profit";
+                      if (volatility > 0.1) return "WAIT & SEE: High Volatility";
+                      return cp > result.PP ? "Bullish Bias" : "Bearish Bias";
+                    })()}
+                  />
                 </ErrorBoundary>
 
                 {/* â•â• PIVOT LADDER with Demand / Supply Zones â•â•â•â•â•â•â•â•â•â•â•â• */}
-                <div className="bg-slate-900/40 rounded-3xl border border-white/5 overflow-hidden">
+                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 overflow-hidden">
                   {/* Ladder Header */}
                   <div className="bg-slate-900/60 px-5 py-4 border-b border-white/5 flex items-center justify-between">
                     <h3 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-2">
@@ -1370,24 +1816,36 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   </div>
                 </div>
 
-                {/* -- BANDAR POWER DETECTOR / Strategic Insights ------- */}
-                <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 p-6 rounded-3xl border border-purple-500/20">
+                {/* -- SMART MONEY FOOTPRINT (SMC / VPA) ----------------- */}
+                <div className="depth-3d bg-gradient-to-br from-indigo-900/20 to-purple-900/20 p-6 rounded-3xl border border-purple-500/20">
                   <h3 className="text-sm font-black text-purple-400 uppercase mb-5 tracking-tighter flex items-center gap-2">
-                    <Zap className="w-4 h-4" /> Bandar Power Detector
+                    <Zap className="w-4 h-4" /> Smart Money Footprint
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">Rentang Harga</p>
-                      <p className="text-lg font-black text-slate-100">{fmt(result.R3 - result.S3)} <span className="text-xs font-bold text-slate-400">pts</span></p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">Jarak ke Supp 1</p>
-                      <p className="text-lg font-black text-green-400">{((result.PP - result.S1) / result.PP * 100).toFixed(2)}%</p>
-                    </div>
-                    <div className="space-y-1 col-span-2 sm:col-span-1">
-                      <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">Potensi Balik Arah</p>
-                      <p className="text-lg font-black text-orange-400">{((result.R1 - result.PP) / result.PP * 100).toFixed(2)}%</p>
-                    </div>
+                    {(() => {
+                      const cp = parseFloat(currentPrice || close);
+                      const isBull = cp > result.PP;
+                      const volStrong = volume && ma20Volume && parseFloat(volume) > parseFloat(ma20Volume);
+                      const smcText = isBull ? "Bullish BOS Detected" : "Bearish BOS Detected";
+                      const vpaText = volStrong ? (isBull ? "High Accumulation Zone" : "Distribution Pressure") : "Balanced Volume";
+                      const vpaColor = volStrong ? (isBull ? "text-green-400" : "text-red-400") : "text-slate-300";
+                      return (
+                        <>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">SMC Structure</p>
+                            <p className="text-base font-black text-amber-400 leading-tight">{smcText}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">VPA Volume Profile</p>
+                            <p className={`text-base font-black leading-tight ${vpaColor}`}>{vpaText}</p>
+                          </div>
+                          <div className="space-y-1 col-span-2 sm:col-span-1">
+                            <p className="text-[10px] text-slate-300 font-medium uppercase tracking-widest">Key Zone Density</p>
+                            <p className="text-base font-black text-purple-400 leading-tight">Order Block Cluster @ {fmt(result.PP)}</p>
+                          </div>
+                        </>
+                      );
+                    })()}
                     {volume && ma20Volume && (() => {
                       const vol = parseFloat(volume);
                       const avgVol = parseFloat(ma20Volume);
