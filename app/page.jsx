@@ -12,6 +12,14 @@ import dynamic from "next/dynamic";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 const RiskRewardVisualizer = dynamic(() => import("../components/RiskRewardVisualizer"), { ssr: false });
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
+const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
+});
+const TrendConfluence = dynamic(() => import("../components/TrendConfluence"), { 
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
+});
 import StoryExportCard from "../components/StoryExportCard";
 
 // --- Helper Utilities --------------------------------------------------------
@@ -158,6 +166,8 @@ export default function PivotAnalyzer() {
   const [confluence, setConfluence] = useState(null);
   const [isClient, setIsClient] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [vcpData, setVcpData] = useState(null); // array OHLCV 120+ bar untuk VcpIndicator
+
 
   // -- State: Average Calculator
   const [avgSlots, setAvgSlots] = useState([{ id: 1, harga: "", lot: "" }, { id: 2, harga: "", lot: "" }]);
@@ -459,7 +469,7 @@ export default function PivotAnalyzer() {
     setHigh(""); setLow(""); setClose(""); setOpen("");
     setVolume(""); setMa20Volume(""); setMa20Price(""); setCurrentPrice("");
     setResult(null); setPattern(null); setConfluence(null);
-    setFetchStatus(null);
+    setFetchStatus(null); setVcpData(null);
   };
 
   // --- Auto-Fill: Fetch OHLCV + MA20 from Yahoo Finance via API route --------
@@ -478,7 +488,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
+      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
@@ -516,8 +526,9 @@ export default function PivotAnalyzer() {
                 setClose(String(d[3]));
                 setCurrentPrice(String(d[3]));
                 if (d[4]) setVolume(String(d[4]));
-                setMa20Volume(""); 
-                setMa20Price("");
+                setMa20Volume("-"); 
+                setMa20Price("-");
+                setVcpData([]);
                 const tfLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[timeframe.toLowerCase()] || timeframe;
                 setFetchStatus({ type: "success", msg: `Data ${code} [${tfLabel}] terdeteksi via Live Scrape!` });
                 return;
@@ -552,13 +563,41 @@ export default function PivotAnalyzer() {
       }
 
       if (data.volume != null) setVolume(String(data.volume));
-      if (data.ma20_volume != null) setMa20Volume(String(data.ma20_volume));
-      if (data.ma20_price != null && data.ma20_price > 0) setMa20Price(String(data.ma20_price));
+      
+      let calculatedMa20Price = "-";
+      let calculatedMa20Volume = "-";
+
+      if (data.ohlcv_history && data.ohlcv_history.length >= 20) {
+          const last20 = data.ohlcv_history.slice(-20);
+          
+          const sumPrice = last20.reduce((acc, curr) => acc + (curr.close || 0), 0);
+          calculatedMa20Price = Math.round(sumPrice / 20).toString();
+          
+          const sumVolume = last20.reduce((acc, curr) => acc + (curr.volume || 0), 0);
+          calculatedMa20Volume = Math.round(sumVolume / 20).toString();
+      } else {
+          calculatedMa20Price = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "-";
+          calculatedMa20Volume = data.ma20_volume != null ? String(data.ma20_volume) : "-";
+      }
+
+      setMa20Price(calculatedMa20Price);
+      setMa20Volume(calculatedMa20Volume);
       
       if (data.current_price != null && data.current_price > 0) {
         setCurrentPrice(String(data.current_price));
       } else if (data.close != null) {
         setCurrentPrice(String(data.close));
+      }
+
+      // -- VCP History: simpan data historis untuk VcpIndicator --
+      if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
+        // Defensive filter: pastikan tidak ada bar null/0 yang lolos dari backend
+        const cleanBars = data.ohlcv_history.filter(b => b && b.open > 0 && b.close > 0 && b.volume >= 0);
+        console.log("Isi vcpData:", cleanBars.length, cleanBars);
+        setVcpData(cleanBars);
+      } else {
+        console.log("Isi vcpData: 0", data.ohlcv_history);
+        setVcpData([]);
       }
 
       const tfLabel = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[timeframe.toLowerCase()] || timeframe;
@@ -567,6 +606,7 @@ export default function PivotAnalyzer() {
         msg: `Data ${code} [${tfLabel}] berhasil diisi${data.tradingDate ? " (" + data.tradingDate + ")" : ""}.`,
       });
     } catch (err) {
+      setVcpData([]);
       if (err.name === 'AbortError') {
         setFetchStatus({ type: "error", msg: "Server Sibuk (Timeout). Silakan Input Manual!" });
       } else {
@@ -590,7 +630,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}`;
+      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
@@ -628,7 +668,8 @@ export default function PivotAnalyzer() {
                 const v = d[4] ? String(d[4]) : "";
                 
                 setOpen(o); setHigh(h); setLow(l); setClose(c);
-                setVolume(v); setMa20Volume(""); setMa20Price(""); setCurrentPrice(curP);
+                setVolume(v); setMa20Volume("-"); setMa20Price("-"); setCurrentPrice(curP);
+                setVcpData([]);
 
                 setFetchStatus({ type: "success", msg: `Data ${code} [${timeframe}] terdeteksi via Live Scrape!` });
                 const hNum = parseFloat(h);
@@ -721,8 +762,22 @@ export default function PivotAnalyzer() {
       }
       
       const v = data.volume != null ? String(data.volume) : "";
-      const m20v = data.ma20_volume != null ? String(data.ma20_volume) : "";
-      const m20p = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "";
+      
+      let m20p = "-";
+      let m20v = "-";
+
+      if (data.ohlcv_history && data.ohlcv_history.length >= 20) {
+          const last20 = data.ohlcv_history.slice(-20);
+          
+          const sumPrice = last20.reduce((acc, curr) => acc + (curr.close || 0), 0);
+          m20p = Math.round(sumPrice / 20).toString();
+          
+          const sumVolume = last20.reduce((acc, curr) => acc + (curr.volume || 0), 0);
+          m20v = Math.round(sumVolume / 20).toString();
+      } else {
+          m20p = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "-";
+          m20v = data.ma20_volume != null ? String(data.ma20_volume) : "-";
+      }
       
       let curP = "";
       if (data.current_price != null && data.current_price > 0) {
@@ -733,6 +788,16 @@ export default function PivotAnalyzer() {
 
       setOpen(o); setHigh(h); setLow(l); setClose(c);
       setVolume(v); setMa20Volume(m20v); setMa20Price(m20p); setCurrentPrice(curP);
+
+      // -- VCP History: simpan data historis untuk VcpIndicator --
+      if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
+        const cleanBars = data.ohlcv_history.filter(b => b && b.open > 0 && b.close > 0 && b.volume >= 0);
+        console.log("Isi vcpData:", cleanBars.length, cleanBars);
+        setVcpData(cleanBars);
+      } else {
+        console.log("Isi vcpData: 0", data.ohlcv_history);
+        setVcpData([]);
+      }
 
       setFetchStatus({
         type: "success",
@@ -798,6 +863,7 @@ export default function PivotAnalyzer() {
          }, 300);
       }
     } catch (err) {
+       setVcpData([]);
        if (err.name === 'AbortError') {
          setFetchStatus({ type: "error", msg: "Server Sibuk (Timeout). Silakan Input Manual!" });
        } else {
@@ -1232,7 +1298,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                 {/* MA20 Volume */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-indigo-400/80 uppercase ml-2">MA20 Volume</label>
-                  <input type="number" value={ma20Volume} onChange={(e) => setMa20Volume(e.target.value)}
+                  <input type="text" value={ma20Volume} onChange={(e) => setMa20Volume(e.target.value)}
                     className="w-full bg-slate-950/50 border border-indigo-500/20 rounded-2xl px-4 py-3 text-sm font-black text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
                 </div>
 
@@ -1243,7 +1309,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     MA20 Price
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={ma20Price}
                     onChange={(e) => setMa20Price(e.target.value)}
                     placeholder="MA20 Harga"
@@ -1699,6 +1765,18 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                      </div>
                    );
                 })()}
+
+                {/* Panel Analisis VCP & Multi-Timeframe Trend */}
+                {vcpData ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6 w-full">
+                    <VcpIndicator data={vcpData} />
+                    <TrendConfluence data={vcpData} />
+                  </div>
+                ) : (
+                  <div className="w-full h-24 animate-pulse bg-purple-900/20 rounded-xl border border-purple-500/20 flex items-center justify-center my-6">
+                    <p className="text-purple-400/50 text-sm">Memuat data analitik lanjutan...</p>
+                  </div>
+                )}
 
                 <ErrorBoundary>
                   <TradingChart

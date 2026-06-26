@@ -34,9 +34,15 @@ def aggregate_ohlcv(df: pd.DataFrame) -> dict:
 @app.get("/api/trading")
 async def get_stock_data(
     symbol: str = Query(..., description="Kode saham IDX, contoh: KAQI atau KAQI.JK"),
-    timeframe: str = Query(default="daily", description="daily | weekly | monthly")
+    timeframe: str = Query(default="daily", description="daily | weekly | monthly"),
+    history: bool = Query(default=False, description="Jika true, sertakan ohlcv_history 120+ bar untuk analisa VCP")
 ):
     ticker = symbol.strip().upper()  # normalize input
+    
+    # Jika panjangnya persis 4 huruf dan belum ada ".JK", otomatis tambahkan
+    if len(ticker) == 4 and not ticker.endswith(".JK"):
+        ticker = f"{ticker}.JK"
+        
     try:
         tf = timeframe.lower()
 
@@ -196,6 +202,10 @@ async def get_stock_data(
             ma_daily_bars = 60
             fetch_period  = "3mo"
 
+        # Jika history=true diperlukan untuk VCP, paksa minimal 6 bulan data
+        if history and fetch_period == "3mo":
+            fetch_period = "6mo"
+
         # ── Fetch Yahoo History ───────────────────────────────────────────────
         try:
             hist = stock.history(period=fetch_period)
@@ -319,6 +329,26 @@ async def get_stock_data(
             "ma20_volume": ma20_volume,
             "ma20_price":  round(ma20_price) if ma20_price > 0 else 0,
         }
+
+        # ── VCP History: sertakan array OHLCV 120+ bar yang sudah disanitasi ──
+        if history and not hist.empty:
+            # 1. Buang baris NaN (hari libur bursa yfinance sering sisipkan NaN)
+            clean = hist.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
+            # 2. Buang baris dengan Close==0 atau Volume==0 (suspensi/data rusak)
+            clean = clean[(clean["Close"] > 0) & (clean["Volume"] > 0)]
+            # 3. Map ke list of dicts — format yang diwajibkan oleh analyzeVCP()
+            ohlcv_history = [
+                {
+                    "open":   round(float(row["Open"]),  2),
+                    "high":   round(float(row["High"]),  2),
+                    "low":    round(float(row["Low"]),   2),
+                    "close":  round(float(row["Close"]), 2),
+                    "volume": int(row["Volume"]),
+                }
+                for _, row in clean.iterrows()
+            ]
+            result_data["ohlcv_history"] = ohlcv_history
+            print(f"[VCP HISTORY] {len(ohlcv_history)} bar bersih dikirim untuk {ticker_jk}")
 
         GLOBAL_CACHE[cache_key] = {'data': result_data, 'time': time.time()}
         return result_data

@@ -37,9 +37,16 @@ export default function VcpIndicator({ data }: VcpIndicatorProps): React.JSX.Ele
   const { vcpStatus, contractions } = result;
   const style = BADGE[vcpStatus];
   const ready = vcpStatus === "TIGHT_READY";
+  if (!data || data.length < 60) {
+    return (
+      <div className="bg-black/40 backdrop-blur-xl border border-purple-500/30 rounded-xl p-4 flex items-center justify-center h-full min-h-[120px]">
+         <p className="text-gray-400 text-sm text-center">Data historis kurang dari 60 hari. Analisis VCP tidak tersedia.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-2xl border border-purple-500/30 bg-black/40 backdrop-blur-xl p-5 shadow-xl shadow-black/40">
+    <div className="rounded-2xl border border-purple-500/30 bg-black/40 backdrop-blur-xl p-5 shadow-xl shadow-black/40 h-full">
       {/* Header + badge status */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <h3 className="text-xs font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
