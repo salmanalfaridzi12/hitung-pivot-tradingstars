@@ -72,10 +72,12 @@ async def get_stock_data(
         live_vol = 0
 
         # Primary Fast Source: TradingView (Bypasses Yahoo's 15-minute IDX delay)
+        # NOTE: jangan `import time` di sini — `time` sudah di-import level modul.
+        # Import lokal akan menjadikan `time` variabel lokal sehingga cache-check
+        # `time.time()` di atas (line ~57) melempar UnboundLocalError saat cache HIT.
         import urllib.request
         import json
         import random
-        import time
 
         tv_success = False
         user_agents = [
