@@ -489,7 +489,8 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || ""; // backend yfinance lokal; kosong di Vercel → relative
+      const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
@@ -575,7 +576,9 @@ export default function PivotAnalyzer() {
           calculatedMa20Price = Math.round(sumPrice / 20).toString();
           
           const sumVolume = last20.reduce((acc, curr) => acc + (curr.volume || 0), 0);
-          calculatedMa20Volume = Math.round(sumVolume / 20).toString();
+          // ohlcv_history.volume = raw lembar → /100 untuk samakan ke satuan LOT
+          // (konsisten dgn field Volume & backend ma20_volume yang juga /100)
+          calculatedMa20Volume = Math.round(sumVolume / 20 / 100).toString();
       } else {
           calculatedMa20Price = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "-";
           calculatedMa20Volume = data.ma20_volume != null ? String(data.ma20_volume) : "-";
@@ -631,7 +634,8 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const fetchUrl = `/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || ""; // backend yfinance lokal; kosong di Vercel → relative
+      const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
@@ -774,7 +778,7 @@ export default function PivotAnalyzer() {
           m20p = Math.round(sumPrice / 20).toString();
           
           const sumVolume = last20.reduce((acc, curr) => acc + (curr.volume || 0), 0);
-          m20v = Math.round(sumVolume / 20).toString();
+          m20v = Math.round(sumVolume / 20 / 100).toString(); // /100 → satuan LOT (raw lembar → lot)
       } else {
           m20p = data.ma20_price != null && data.ma20_price > 0 ? String(data.ma20_price) : "-";
           m20v = data.ma20_volume != null ? String(data.ma20_volume) : "-";
