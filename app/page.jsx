@@ -30,6 +30,19 @@ const fmtDec = (n) =>
     ? n.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
     : "-";
 
+// Base URL backend OHLC (auto-fill). Lokal: pakai NEXT_PUBLIC_API_URL (uvicorn).
+// Production hardening: kalau halaman disajikan via HTTPS tapi base menunjuk ke
+// localhost/loopback (env var nyasar di Vercel), ABAIKAN → pakai path relative
+// "/api/trading" (fungsi Python Vercel). Tanpa ini, browser memblokir fetch
+// https→http://127.0.0.1 (mixed-content) dan muncul "Koneksi bermasalah".
+function resolveApiBase() {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+  if (!raw) return "";
+  const isLoopback = /^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[?::1\]?)(:\d+)?/i.test(raw);
+  const onHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  return onHttps && isLoopback ? "" : raw;
+}
+
 // --- Input Field Component ---------------------------------------------------
 function InputField({ label, value, onChange, type = "number", color = "", placeholder = "", labelClass = "text-slate-500", borderClass = "border-white/10", ringClass = "focus:ring-purple-500" }) {
   return (
@@ -240,6 +253,31 @@ export default function PivotAnalyzer() {
     const half = (pivotRange > 0 ? pivotRange : anchor * 0.02) * (pct / 100);
     return { low: Math.round(anchor - half), high: Math.round(anchor + half) };
   }, [result, currentPrice, close, zonePct]);
+
+  // --- Derived: Validitas setup AI (sinkron sentimen ↔ Entry/TP/SL) ----------
+  // Tujuan: cegah info kontradiktif — kalau AI bearish / wait & see / tak ada
+  // level, Trading Plan & grid Entry harus ikut "tidak valid", bukan tetap hijau.
+  const aiSetup = useMemo(() => {
+    const isNA = (v) => {
+      if (v == null) return true;
+      const s = String(v).trim().toLowerCase();
+      return (
+        s === "" || s === "-" || s === "n/a" || s === "na" ||
+        s === "tidak ada" || s === "null" ||
+        /wait[\s_]*(and[\s_]*)?see/.test(s)
+      );
+    };
+    const sentimentRaw = String(aiData?.sentiment ?? "");
+    const isBearish = /bearish/i.test(sentimentRaw);
+    const isWaitSee = /wait[\s_]*(and[\s_]*)?see/i.test(sentimentRaw);
+    const entryNA = isNA(aiData?.entry);
+    const tpNA = isNA(aiData?.tp);
+    const slNA = isNA(aiData?.sl);
+    const noTargets = tpNA && slNA; // tak ada target & stop → bukan setup
+    // Grid menyusut ke "Wait & See" saat bearish/wait atau tanpa target+stop.
+    const collapse = isBearish || isWaitSee || noTargets;
+    return { isBearish, isWaitSee, entryNA, tpNA, slNA, noTargets, collapse, invalid: collapse || entryNA };
+  }, [aiData]);
 
   // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
@@ -489,7 +527,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || ""; // backend yfinance lokal; kosong di Vercel → relative
+      const apiBase = resolveApiBase(); // lokal: backend uvicorn; production: relative (abaikan localhost nyasar)
       const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
@@ -634,7 +672,7 @@ export default function PivotAnalyzer() {
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const tf = timeframe.toLowerCase();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || ""; // backend yfinance lokal; kosong di Vercel → relative
+      const apiBase = resolveApiBase(); // lokal: backend uvicorn; production: relative (abaikan localhost nyasar)
       const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
       console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
@@ -1415,47 +1453,80 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                         <span className="text-[11px] font-black text-white flex-1 min-w-[140px]">{aiData.headline}</span>
                       </div>
 
-                      {/* Gauge keyakinan */}
+                      {/* Gauge keyakinan — angka % mengambang tepat di ujung bar terisi */}
                       {aiData.confidence != null && (() => {
                         const conf = Math.max(0, Math.min(100, Number(aiData.confidence) || 0));
                         const col = aiData.sentiment === 'BULLISH' ? 'from-green-500 to-emerald-400'
                           : aiData.sentiment === 'BEARISH' ? 'from-red-500 to-rose-400'
                           : 'from-slate-500 to-slate-400';
+                        const markerLeft = Math.min(94, Math.max(6, conf)); // clamp biar bubble tak kepotong di tepi
                         return (
                           <div>
-                            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
-                              <span>Keyakinan</span><span className="text-slate-300">{conf}%</span>
-                            </div>
-                            <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-white/5">
-                              <div className={`h-full bg-gradient-to-r ${col} rounded-full transition-all duration-700`} style={{ width: `${conf}%` }} />
+                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Keyakinan</div>
+                            <div className="relative pt-5">
+                              {/* bubble % di atas ujung fill */}
+                              <div
+                                className="absolute top-0 transition-all duration-700"
+                                style={{ left: `${markerLeft}%`, transform: 'translateX(-50%)' }}
+                              >
+                                <span className={`inline-block text-[10px] font-black tabular-nums text-white px-1.5 py-0.5 rounded-md bg-gradient-to-r ${col} shadow-[0_2px_8px_rgba(0,0,0,0.45)]`}>
+                                  {conf}%
+                                </span>
+                              </div>
+                              <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-white/5">
+                                <div className={`h-full bg-gradient-to-r ${col} rounded-full transition-all duration-700`} style={{ width: `${conf}%` }} />
+                              </div>
                             </div>
                           </div>
                         );
                       })()}
 
-                      {/* Narasi (efek ketik) */}
+                      {/* Narasi (efek ketik) — whitespace-pre-line agar \n jadi baris/paragraf */}
                       {aiData.analysis && (
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                        <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line">
                           {aiTyped}
                           {aiTyped.length < String(aiData.analysis).length && <span className="text-purple-400 animate-pulse">▋</span>}
                         </p>
                       )}
 
-                      {/* Chips Entry / TP / SL */}
-                      {(aiData.entry || aiData.tp || aiData.sl) && (
+                      {/* Chips Entry / TP / SL — menyusut jadi "Wait & See" saat setup tak valid */}
+                      {(aiData.entry || aiData.tp || aiData.sl || aiSetup.collapse) && (
                         <div className="grid grid-cols-3 gap-2">
-                          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
-                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-purple-300 mb-0.5"><TrendingUp className="w-3 h-3" /> Entry</div>
-                            <div className="text-[11px] font-black text-white break-words">{aiData.entry || '-'}</div>
+                          {/* Entry — meluas full-width saat tak ada setup valid */}
+                          <div className={`p-2.5 rounded-xl border text-center ${
+                            aiSetup.collapse
+                              ? 'col-span-full bg-amber-500/10 border-amber-500/30'
+                              : 'bg-purple-500/10 border-purple-500/20'
+                          }`}>
+                            <div className={`flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest mb-0.5 ${aiSetup.collapse ? 'text-amber-300' : 'text-purple-300'}`}>
+                              <TrendingUp className="w-3 h-3" /> {aiSetup.collapse ? 'Wait & See' : 'Entry'}
+                            </div>
+                            {aiSetup.collapse ? (
+                              <>
+                                {!aiSetup.entryNA && (
+                                  <div className="text-[11px] font-black text-white break-words mb-1">Pantau: {aiData.entry}</div>
+                                )}
+                                <p className="text-[10px] font-bold text-amber-300/90 leading-snug">
+                                  ⚠️ WAIT &amp; SEE: Tidak ada setup entry yang valid saat ini. Pantau reaksi harga di level support terdekat.
+                                </p>
+                              </>
+                            ) : (
+                              <div className="text-[11px] font-black text-white break-words">{aiData.entry || '-'}</div>
+                            )}
                           </div>
-                          <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
-                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
-                            <div className="text-[11px] font-black text-green-300 break-words">{aiData.tp || '-'}</div>
-                          </div>
-                          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
-                            <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
-                            <div className="text-[11px] font-black text-red-300 break-words">{aiData.sl || '-'}</div>
-                          </div>
+                          {/* TP & SL — disembunyikan saat setup tak valid */}
+                          {!aiSetup.collapse && (
+                            <>
+                              <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+                                <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
+                                <div className="text-[11px] font-black text-green-300 break-words">{aiData.tp || '-'}</div>
+                              </div>
+                              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                                <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
+                                <div className="text-[11px] font-black text-red-300 break-words">{aiData.sl || '-'}</div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
 
@@ -1516,28 +1587,39 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     )}
                   </div>
 
-                  {/* Trading Plan / RRR Card */}
+                  {/* Trading Plan / RRR Card — sinkron dengan sentimen AI */}
+                  {(() => {
+                    const planInvalid = aiData && aiSetup.invalid; // bearish / wait & see / Entry-TP-SL N/A
+                    return (
                   <div
-                    className="rounded-2xl border border-yellow-500/25 bg-yellow-500/5 p-4 flex flex-col gap-2.5"
-                    style={{ boxShadow: "0 0 20px rgba(234,179,8,0.08)" }}
+                    className={`rounded-2xl border p-4 flex flex-col gap-2.5 ${
+                      planInvalid ? "border-white/10 bg-slate-500/5" : "border-yellow-500/25 bg-yellow-500/5"
+                    }`}
+                    style={planInvalid ? undefined : { boxShadow: "0 0 20px rgba(234,179,8,0.08)" }}
                   >
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Trading Plan</p>
                     {calcRRR ? (
                       <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">RRR Setup</p>
                         <p
-                          className="text-xl font-black text-yellow-400 leading-tight"
-                          style={{ textShadow: "0 0 24px rgba(234,179,8,0.55)" }}
+                          className={`text-xl font-black leading-tight ${planInvalid ? "text-slate-500 opacity-50" : "text-yellow-400"}`}
+                          style={planInvalid ? undefined : { textShadow: "0 0 24px rgba(234,179,8,0.55)" }}
                         >
                           1 : {calcRRR}
                         </p>
-                        <p className="text-[9px] text-slate-300 font-medium mt-1">
-                          {parseFloat(calcRRR) >= 2
-                            ? "✅ Setup Favorit"
-                            : parseFloat(calcRRR) >= 1
-                            ? "⚡ Setup Layak"
-                            : "⚠️ Risk Tinggi"}
-                        </p>
+                        {planInvalid ? (
+                          <p className="text-[9px] font-bold text-amber-400/90 mt-1 leading-snug">
+                            ⏳ Setup Tidak Valid (Menunggu Konfirmasi)
+                          </p>
+                        ) : (
+                          <p className="text-[9px] text-slate-300 font-medium mt-1">
+                            {parseFloat(calcRRR) >= 2
+                              ? "✅ Setup Favorit"
+                              : parseFloat(calcRRR) >= 1
+                              ? "⚡ Setup Layak"
+                              : "⚠️ Risk Tinggi"}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-[10px] text-slate-400 font-medium italic leading-snug">
@@ -1545,6 +1627,8 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                       </p>
                     )}
                   </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Kontrol lebar zona entry (berbasis rentang pivot, bisa diatur) */}
