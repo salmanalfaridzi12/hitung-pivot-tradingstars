@@ -10,6 +10,7 @@ import {
 import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
+import { sanitizeOHLCV } from "../utils/vcp";
 const RiskRewardVisualizer = dynamic(() => import("../components/RiskRewardVisualizer"), { ssr: false });
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
@@ -592,7 +593,7 @@ export default function PivotAnalyzer() {
       // -- VCP History: simpan data historis untuk VcpIndicator --
       if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
         // Defensive filter: pastikan tidak ada bar null/0 yang lolos dari backend
-        const cleanBars = data.ohlcv_history.filter(b => b && b.open > 0 && b.close > 0 && b.volume >= 0);
+        const cleanBars = sanitizeOHLCV(data.ohlcv_history);
         console.log("Isi vcpData:", cleanBars.length, cleanBars);
         setVcpData(cleanBars);
       } else {
@@ -791,7 +792,7 @@ export default function PivotAnalyzer() {
 
       // -- VCP History: simpan data historis untuk VcpIndicator --
       if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
-        const cleanBars = data.ohlcv_history.filter(b => b && b.open > 0 && b.close > 0 && b.volume >= 0);
+        const cleanBars = sanitizeOHLCV(data.ohlcv_history);
         console.log("Isi vcpData:", cleanBars.length, cleanBars);
         setVcpData(cleanBars);
       } else {

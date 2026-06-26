@@ -55,6 +55,32 @@ const mean = (arr: readonly number[]): number =>
   arr.length === 0 ? 0 : arr.reduce((s, v) => s + v, 0) / arr.length;
 
 /**
+ * Bersihkan deret OHLCV mentah (mis. dari yfinance) sebelum di-pass ke analyzeVCP.
+ * Buang bar hari libur/null/non-finite di SALAH SATU field — termasuk high & low
+ * yang dipakai swing detection — agar drawdown & MA volume tidak menghasilkan NaN.
+ */
+export function sanitizeOHLCV(raw: unknown): OHLCV[] {
+  if (!Array.isArray(raw)) return [];
+  const out: OHLCV[] = [];
+  for (const bar of raw) {
+    if (!bar || typeof bar !== "object") continue;
+    const b = bar as Record<string, unknown>;
+    const o = Number(b.open);
+    const h = Number(b.high);
+    const l = Number(b.low);
+    const c = Number(b.close);
+    const v = Number(b.volume);
+    if (![o, h, l, c].every((x) => Number.isFinite(x) && x > 0)) continue;
+    if (!Number.isFinite(v) || v < 0) continue;
+    if (h < l) continue; // sanity: high tidak mungkin < low
+    const item: OHLCV = { open: o, high: h, low: l, close: c, volume: v };
+    if (typeof b.time === "string" || typeof b.time === "number") item.time = b.time;
+    out.push(item);
+  }
+  return out;
+}
+
+/**
  * Analisa VCP dari deret OHLCV historis.
  * @param data deret OHLCV kronologis (lama → baru), mis. dari yfinance.
  */
