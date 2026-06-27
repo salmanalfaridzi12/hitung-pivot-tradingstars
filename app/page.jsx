@@ -14,10 +14,12 @@ import { usePathname } from "next/navigation";
 import GlossaryText from "../components/GlossaryText";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 import { sanitizeOHLCV } from "../utils/vcp";
+import { analyzeOrderBlocks } from "../utils/orderBlocks";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
 const LiquidityMap = dynamic(() => import("../components/LiquidityMap"), { ssr: false });
+const OrderBlockPanel = dynamic(() => import("../components/OrderBlockPanel"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -335,6 +337,12 @@ export default function PivotAnalyzer() {
     const collapse = isBearish || isWaitSee || entryNA;
     return { isBearish, isWaitSee, isKonsolidasi, agrLevel, demLevel, entryNA, tpNA, slNA, noTargets, collapse, invalid: collapse || noTargets };
   }, [aiData]);
+
+  // P17 · Module 3: order blocks dari histori (dipakai panel + overlay chart).
+  const orderBlocksData = useMemo(
+    () => (vcpData && vcpData.length >= 10 ? analyzeOrderBlocks(vcpData) : null),
+    [vcpData]
+  );
 
   // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
   // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
@@ -1944,12 +1952,18 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   <LiquidityMap data={vcpData} loading={!vcpData} />
                 </ErrorBoundary>
 
+                {/* P17 · Module 3: Institutional Order Block Engine */}
+                <ErrorBoundary>
+                  <OrderBlockPanel data={vcpData} loading={!vcpData} />
+                </ErrorBoundary>
+
                 <ErrorBoundary>
                   <TradingChart
                     ohlc={{ open, high, low, close, volume }}
                     levels={result}
                     pattern={pattern}
                     stockCode={stockCode}
+                    orderBlocks={orderBlocksData}
                     signalText={(() => {
                       const cp = parseFloat(currentPrice || close);
                       if (!result || isNaN(cp)) return null;

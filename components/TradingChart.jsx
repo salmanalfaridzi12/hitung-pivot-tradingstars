@@ -15,7 +15,7 @@ function makeRnd(seed) {
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 }
 
-export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText }) {
+export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText, orderBlocks = null }) {
   const containerRef = useRef(null);
 
   const o = parseFloat(ohlc?.open);
@@ -129,6 +129,22 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
       candle.createPriceLine({ price: levels.PP - obHalf, color: "rgba(167,139,250,0.13)", lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
     }
 
+    // --- P17 Module 3: overlay Order Block zones (translucent) — bullish hijau / bearish merah ---
+    if (orderBlocks && Array.isArray(orderBlocks.blocks)) {
+      const nearest = orderBlocks.nearestActive;
+      orderBlocks.blocks
+        .filter((b) => b && b.status !== "Invalidated" && b.priceHigh > 0 && b.priceLow > 0)
+        .slice(0, 6)
+        .forEach((b) => {
+          const isBull = b.type === "Bullish";
+          const isNearest = nearest && b.type === nearest.type && b.createdAt === nearest.createdAt;
+          const alpha = isNearest ? 0.5 : 0.2;
+          const col = isBull ? `rgba(0,255,102,${alpha})` : `rgba(239,68,68,${alpha})`;
+          candle.createPriceLine({ price: b.priceHigh, color: col, lineWidth: isNearest ? 2 : 1, lineStyle: 0, axisLabelVisible: false, title: isNearest ? `${b.type} OB` : "" });
+          candle.createPriceLine({ price: b.priceLow, color: col, lineWidth: isNearest ? 2 : 1, lineStyle: 0, axisLabelVisible: false });
+        });
+    }
+
     // --- SMC markers: CHoCH + Bullish BOS + pola candle ---
     const markers = [];
     markers.push({ time: candles[Math.floor(N * 0.4)].time, position: "aboveBar", color: "#f97316", shape: "arrowDown", text: "CHoCH" });
@@ -155,7 +171,7 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
       chart.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o, h, l, c, JSON.stringify(levels), pattern?.name]);
+  }, [o, h, l, c, JSON.stringify(levels), pattern?.name, orderBlocks?.blocks?.length]);
 
   if (!valid) return null;
 
