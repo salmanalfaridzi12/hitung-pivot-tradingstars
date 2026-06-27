@@ -15,11 +15,14 @@ import GlossaryText from "../components/GlossaryText";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 import { sanitizeOHLCV } from "../utils/vcp";
 import { analyzeOrderBlocks } from "../utils/orderBlocks";
+import { analyzeFairValueGaps } from "../utils/fairValueGaps";
+import { buildMarketMap } from "../utils/marketMap";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
 const LiquidityMap = dynamic(() => import("../components/LiquidityMap"), { ssr: false });
 const OrderBlockPanel = dynamic(() => import("../components/OrderBlockPanel"), { ssr: false });
+const FairValueGapPanel = dynamic(() => import("../components/FairValueGapPanel"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -343,6 +346,16 @@ export default function PivotAnalyzer() {
     () => (vcpData && vcpData.length >= 10 ? analyzeOrderBlocks(vcpData) : null),
     [vcpData]
   );
+
+  // P17 · Module 4: Fair Value Gaps (reuse fase Market Map untuk prioritas).
+  const fvgData = useMemo(() => {
+    if (!vcpData || vcpData.length < 5) return null;
+    const cp = parseFloat(currentPrice) || parseFloat(close);
+    const phase = (result && Number.isFinite(cp))
+      ? (buildMarketMap({ pivots: result, currentPrice: cp, ma20: parseFloat(ma20Price) || null })?.phase ?? null)
+      : null;
+    return analyzeFairValueGaps(vcpData, { phase });
+  }, [vcpData, result, currentPrice, close, ma20Price]);
 
   // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
   // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
@@ -1957,6 +1970,11 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   <OrderBlockPanel data={vcpData} loading={!vcpData} />
                 </ErrorBoundary>
 
+                {/* P17 · Module 4: Institutional Fair Value Gap Engine */}
+                <ErrorBoundary>
+                  <FairValueGapPanel data={vcpData} loading={!vcpData} precomputed={fvgData} />
+                </ErrorBoundary>
+
                 <ErrorBoundary>
                   <TradingChart
                     ohlc={{ open, high, low, close, volume }}
@@ -1964,6 +1982,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     pattern={pattern}
                     stockCode={stockCode}
                     orderBlocks={orderBlocksData}
+                    fvgs={fvgData}
                     signalText={(() => {
                       const cp = parseFloat(currentPrice || close);
                       if (!result || isNaN(cp)) return null;

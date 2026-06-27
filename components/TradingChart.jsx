@@ -15,7 +15,7 @@ function makeRnd(seed) {
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 }
 
-export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText, orderBlocks = null }) {
+export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText, orderBlocks = null, fvgs = null }) {
   const containerRef = useRef(null);
 
   const o = parseFloat(ohlc?.open);
@@ -145,6 +145,23 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
         });
     }
 
+    // --- P17 Module 4: overlay Fair Value Gap zones — bullish hijau / bearish merah, terisi diredupkan ---
+    if (fvgs && Array.isArray(fvgs.gaps)) {
+      const nf = fvgs.nearestActive;
+      fvgs.gaps
+        .filter((g) => g && g.gapHigh > 0 && g.gapLow > 0)
+        .slice(0, 6)
+        .forEach((g) => {
+          const isBull = g.type === "Bullish";
+          const isNearest = nf && g.type === nf.type && g.createdAt === nf.createdAt;
+          const faded = g.status === "Invalidated" || g.status === "Filled";
+          const alpha = faded ? 0.08 : isNearest ? 0.4 : 0.18;
+          const col = isBull ? `rgba(0,255,102,${alpha})` : `rgba(239,68,68,${alpha})`;
+          candle.createPriceLine({ price: g.gapHigh, color: col, lineWidth: isNearest ? 2 : 1, lineStyle: 2, axisLabelVisible: false, title: isNearest ? `${g.type} FVG` : "" });
+          candle.createPriceLine({ price: g.gapLow, color: col, lineWidth: isNearest ? 2 : 1, lineStyle: 2, axisLabelVisible: false });
+        });
+    }
+
     // --- SMC markers: CHoCH + Bullish BOS + pola candle ---
     const markers = [];
     markers.push({ time: candles[Math.floor(N * 0.4)].time, position: "aboveBar", color: "#f97316", shape: "arrowDown", text: "CHoCH" });
@@ -171,7 +188,7 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
       chart.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o, h, l, c, JSON.stringify(levels), pattern?.name, orderBlocks?.blocks?.length]);
+  }, [o, h, l, c, JSON.stringify(levels), pattern?.name, orderBlocks?.blocks?.length, fvgs?.gaps?.length]);
 
   if (!valid) return null;
 
