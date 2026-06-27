@@ -16,6 +16,7 @@ import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 import { sanitizeOHLCV } from "../utils/vcp";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
+const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -1925,6 +1926,17 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     <p className="text-purple-400/50 text-sm">Memuat data analitik lanjutan...</p>
                   </div>
                 )}
+
+                {/* P16: Smart Market Map — dynamic liquidity zones + fase pasar (anchor matematis) */}
+                <ErrorBoundary>
+                  <SmartMarketMap
+                    pivots={result}
+                    currentPrice={currentPrice || close}
+                    ma20={ma20Price}
+                    volume={volume}
+                    ma20Volume={ma20Volume}
+                  />
+                </ErrorBoundary>
 
                 <ErrorBoundary>
                   <TradingChart
