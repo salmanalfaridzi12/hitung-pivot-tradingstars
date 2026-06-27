@@ -17,6 +17,7 @@ import { sanitizeOHLCV } from "../utils/vcp";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
+const LiquidityMap = dynamic(() => import("../components/LiquidityMap"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -1936,6 +1937,11 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     volume={volume}
                     ma20Volume={ma20Volume}
                   />
+                </ErrorBoundary>
+
+                {/* P17 · Module 1: Institutional Liquidity Engine */}
+                <ErrorBoundary>
+                  <LiquidityMap data={vcpData} loading={!vcpData} />
                 </ErrorBoundary>
 
                 <ErrorBoundary>
