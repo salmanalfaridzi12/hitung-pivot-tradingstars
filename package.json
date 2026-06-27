@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@google/genai": "^2.10.0",
+    "@supabase/supabase-js": "^2.108.2",
     "@tailwindcss/postcss": "^4.2.2",
     "clsx": "^2.1.1",
     "cookie": "^1.1.1",
