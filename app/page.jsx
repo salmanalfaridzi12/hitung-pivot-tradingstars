@@ -11,6 +11,7 @@ import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import GlossaryText from "../components/GlossaryText";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 import { sanitizeOHLCV } from "../utils/vcp";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
@@ -65,6 +66,14 @@ function ZoneTag({ text, tone }) {
     </div>
   );
 }
+
+// Stock Universe — pill filter cepat (P7). Tiap kategori = daftar ticker quick-pick.
+const STOCK_UNIVERSE = {
+  "Blue Chip": ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "ICBP"],
+  "High Volatility": ["GOTO", "BUMI", "BRMS", "CUAN", "PTRO", "BREN"],
+  "SMC Setup": ["ANTM", "MDKA", "INCO", "ADRO", "ITMG"],
+  "Breakout": ["TPIA", "BRPT", "AMMN", "PANI", "RAJA"],
+};
 
 // Base URL backend OHLC (auto-fill). Lokal: pakai NEXT_PUBLIC_API_URL (uvicorn).
 // Production hardening: kalau halaman disajikan via HTTPS tapi base menunjuk ke
@@ -191,6 +200,7 @@ export default function PivotAnalyzer() {
   // -- State: Application
   const [tab, setTab] = useState("main");
   const pathname = usePathname(); // untuk state aktif tombol nav "News" (route /news)
+  const [universe, setUniverse] = useState(null); // P7: filter Stock Universe aktif
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -1298,6 +1308,42 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
           })}
         </nav>
 
+        {/* P7: Stock Universe filter pills — quick-pick ticker per kategori */}
+        <div className="flex flex-col gap-2 -mt-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {Object.keys(STOCK_UNIVERSE).map((cat) => {
+              const active = universe === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setUniverse(active ? null : cat)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border transition-all duration-300 ${
+                    active
+                      ? "bg-purple-500/20 text-purple-200 border-purple-400/60 shadow-[0_0_14px_rgba(168,85,247,0.5)]"
+                      : "bg-slate-900/50 text-slate-400 border-white/10 hover:text-purple-300 hover:border-purple-500/40 hover:shadow-[0_0_10px_rgba(168,85,247,0.3)]"
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+          {universe && (
+            <div className="flex items-center gap-1.5 flex-wrap animate-in fade-in slide-in-from-top-1 duration-300">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-600 mr-1">{universe}:</span>
+              {STOCK_UNIVERSE[universe].map((tk) => (
+                <button
+                  key={tk}
+                  onClick={() => handleGiantClick(tk)}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-slate-800/60 text-slate-200 border border-white/5 hover:bg-purple-500/15 hover:text-purple-200 hover:border-purple-500/40 hover:shadow-[0_0_8px_rgba(168,85,247,0.3)] transition-all"
+                >
+                  {tk}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* â•â• MAIN ANALYSIS TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {tab === "main" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-6">
@@ -1560,13 +1606,17 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                         );
                       })()}
 
-                      {/* Narasi (efek ketik) — whitespace-pre-line agar \n jadi baris/paragraf */}
-                      {(aiData.analysis_text ?? aiData.analysis) && (
-                        <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line">
-                          {aiTyped}
-                          {aiTyped.length < String(aiData.analysis_text ?? aiData.analysis).length && <span className="text-purple-400 animate-pulse">▋</span>}
-                        </p>
-                      )}
+                      {/* Narasi: efek ketik dulu; setelah selesai, bungkus istilah glosarium (tooltip) */}
+                      {(() => {
+                        const full = String(aiData.analysis_text ?? aiData.analysis ?? "");
+                        if (!full) return null;
+                        const cls = "text-[11px] text-slate-300 leading-relaxed whitespace-pre-line";
+                        return aiTyped.length < full.length ? (
+                          <p className={cls}>{aiTyped}<span className="text-purple-400 animate-pulse">▋</span></p>
+                        ) : (
+                          <GlossaryText text={full} className={cls} />
+                        );
+                      })()}
 
                       {/* Chips Entry / TP / SL — schema nested; menyusut jadi "Wait & See" saat crisis */}
                       <div className="grid grid-cols-3 gap-2">
