@@ -117,16 +117,16 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
             color: lineColors[k] || "#64748b",
             lineWidth: 1,
             lineStyle: 2, // dashed
-            axisLabelVisible: true,
+            axisLabelVisible: false, // label pivot via `title` di garis → tidak menumpuk price scale
             title: k,
           });
         }
       });
 
-      // --- SMC: Order Block band (ungu) di sekitar PP ---
+      // --- SMC: Order Block band (ungu) di sekitar PP — fill sangat tipis (~13%) ---
       const obHalf = range * 0.03;
-      candle.createPriceLine({ price: levels.PP + obHalf, color: "rgba(167,139,250,0.55)", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "OB" });
-      candle.createPriceLine({ price: levels.PP - obHalf, color: "rgba(167,139,250,0.55)", lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
+      candle.createPriceLine({ price: levels.PP + obHalf, color: "rgba(167,139,250,0.13)", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "OB" });
+      candle.createPriceLine({ price: levels.PP - obHalf, color: "rgba(167,139,250,0.13)", lineWidth: 1, lineStyle: 0, axisLabelVisible: false });
     }
 
     // --- SMC markers: CHoCH + Bullish BOS + pola candle ---

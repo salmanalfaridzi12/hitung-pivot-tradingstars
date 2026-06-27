@@ -5,14 +5,16 @@ import {
   TrendingUp, TrendingDown, Target, Shield, AlertCircle,
   Share2, Save, Bell, LineChart, Table, History, Image as ImageIcon,
   ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar,
-  Loader2, CheckCircle2, XCircle, WifiOff, Star, Calculator
+  Loader2, CheckCircle2, XCircle, WifiOff, Star, Calculator, Newspaper
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { identifyPattern, getConfluenceLabel } from "../utils/patterns";
 import { sanitizeOHLCV } from "../utils/vcp";
-const RiskRewardVisualizer = dynamic(() => import("../components/RiskRewardVisualizer"), { ssr: false });
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
+const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -29,6 +31,40 @@ const fmtDec = (n) =>
   n != null
     ? n.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
     : "-";
+
+// Format level harga dari AI: angka → "6.175"; string "N/A"/teks → apa adanya.
+const fmtLevel = (v) => {
+  if (v == null) return "-";
+  if (typeof v === "number") return Number.isFinite(v) ? v.toLocaleString("id-ID") : "-";
+  const s = String(v).trim();
+  const n = Number(s.replace(/[^\d.-]/g, ""));
+  return s !== "" && Number.isFinite(n) && /\d/.test(s) ? n.toLocaleString("id-ID") : s || "-";
+};
+
+// --- Pivot Ladder: sel level & label zona (DISPLAY-ONLY, tanpa kalkulasi) ---
+function PivotCell({ label, value, tone }) {
+  const color =
+    tone === "supply" ? "text-orange-400 border-orange-500/20"
+    : tone === "demand" ? "text-green-400 border-green-500/20"
+    : "text-purple-300 border-purple-500/20";
+  return (
+    <div className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-950/40 border transition-all hover:bg-white/5 ${color}`}>
+      <span className="text-[10px] font-black w-7 flex-shrink-0">{label}</span>
+      <span className="text-sm font-black tabular-nums">
+        {Number.isFinite(value) && value > 0 ? Math.round(value).toLocaleString("id-ID") : "—"}
+      </span>
+    </div>
+  );
+}
+function ZoneTag({ text, tone }) {
+  const c = tone === "red" ? "text-red-400 bg-red-500/10 border-red-500/30" : "text-green-400 bg-green-500/10 border-green-500/30";
+  const arrow = tone === "red" ? "▲" : "▼";
+  return (
+    <div className={`text-center text-[8px] font-black uppercase tracking-widest py-1 rounded-md border ${c}`}>
+      {arrow} {text}
+    </div>
+  );
+}
 
 // Base URL backend OHLC (auto-fill). Lokal: pakai NEXT_PUBLIC_API_URL (uvicorn).
 // Production hardening: kalau halaman disajikan via HTTPS tapi base menunjuk ke
@@ -154,6 +190,7 @@ export default function PivotAnalyzer() {
 
   // -- State: Application
   const [tab, setTab] = useState("main");
+  const pathname = usePathname(); // untuk state aktif tombol nav "News" (route /news)
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -163,6 +200,8 @@ export default function PivotAnalyzer() {
   // -- Kalkulator posisi (modal & risiko per trade)
   const [capital, setCapital] = useState("");
   const [riskPct, setRiskPct] = useState(2);
+  const [calcEntry, setCalcEntry] = useState(""); // Harga Entry — default Entry Agresif (AI)
+  const [calcSL, setCalcSL] = useState("");        // Harga SL — default SL (AI) / S1
 
   // -- AI (Gemini) analysis state
   const [aiLoading, setAiLoading] = useState(false);
@@ -270,14 +309,32 @@ export default function PivotAnalyzer() {
     const sentimentRaw = String(aiData?.sentiment ?? "");
     const isBearish = /bearish/i.test(sentimentRaw);
     const isWaitSee = /wait[\s_]*(and[\s_]*)?see/i.test(sentimentRaw);
-    const entryNA = isNA(aiData?.entry);
-    const tpNA = isNA(aiData?.tp);
-    const slNA = isNA(aiData?.sl);
-    const noTargets = tpNA && slNA; // tak ada target & stop → bukan setup
-    // Grid menyusut ke "Wait & See" saat bearish/wait atau tanpa target+stop.
-    const collapse = isBearish || isWaitSee || noTargets;
-    return { isBearish, isWaitSee, entryNA, tpNA, slNA, noTargets, collapse, invalid: collapse || entryNA };
+    const isKonsolidasi = /konsolidasi|netral|neutral/i.test(sentimentRaw);
+    // Schema nested: entry.{agresif,demand}.level, tp.level, sl.level
+    const agrLevel = aiData?.entry?.agresif?.level;
+    const demLevel = aiData?.entry?.demand?.level;
+    const entryNA = isNA(agrLevel) && isNA(demLevel); // valid kalau salah satu ada
+    const tpNA = isNA(aiData?.tp?.level);
+    const slNA = isNA(aiData?.sl?.level);
+    const noTargets = tpNA && slNA;
+    // Crisis (Part 4.3): BEARISH / wait_and_see / entry level null-N/A →
+    // sembunyikan TP+SL, Entry full-width "Wait & See", Trading Plan tidak valid.
+    // KONSOLIDASI tidak otomatis crisis (selama masih ada level entry).
+    const collapse = isBearish || isWaitSee || entryNA;
+    return { isBearish, isWaitSee, isKonsolidasi, agrLevel, demLevel, entryNA, tpNA, slNA, noTargets, collapse, invalid: collapse || noTargets };
   }, [aiData]);
+
+  // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
+  // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
+  useEffect(() => {
+    const agr = Number(aiSetup.agrLevel);
+    const aiSl = Number(aiData?.sl?.level);
+    const defEntry = Number.isFinite(agr) && agr > 0 ? agr : (parseFloat(currentPrice) || parseFloat(close));
+    const defSL = Number.isFinite(aiSl) && aiSl > 0 ? aiSl : (result ? result.S1 : NaN);
+    if (Number.isFinite(defEntry) && defEntry > 0) setCalcEntry(String(Math.round(defEntry)));
+    if (Number.isFinite(defSL) && defSL > 0) setCalcSL(String(Math.round(defSL)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiData, result]);
 
   // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
@@ -349,21 +406,35 @@ export default function PivotAnalyzer() {
     }
   };
 
-  // Susun teks analisa untuk Salin / Bagikan
+  // Susun teks analisa untuk Salin / Bagikan (schema nested, fallback ke lama)
   const buildAiText = () => {
     const d = aiData;
     if (!d) return "";
-    return [
+    const crisis = aiSetup.collapse;
+    const narrative = d.analysis_text ?? d.analysis;
+    const agr = d.entry?.agresif, dem = d.entry?.demand;
+    const conf = d.confluence_score != null ? ` · Confluence ${d.confluence_score}/100${d.confidence ? ` (${d.confidence})` : ""}` : "";
+    const lines = [
       `📊 Analisa AI — ${stockCode || "Saham"} (${timeframe})`,
-      `Sentiment: ${d.sentiment}${d.confidence != null ? ` (${d.confidence}%)` : ""}`,
+      `Sentiment: ${d.sentiment}${conf}`,
       d.headline ? `\n${d.headline}` : "",
-      d.analysis ? `\n${d.analysis}` : "",
-      d.entry ? `\nEntry: ${d.entry}` : "",
-      d.tp ? `TP: ${d.tp}` : "",
-      d.sl ? `SL: ${d.sl}` : "",
-      d.risk ? `\nRisiko: ${d.risk}` : "",
-      d.disclaimer ? `\n${d.disclaimer}` : "",
-    ].filter(Boolean).join("\n");
+      narrative ? `\n${narrative}` : "",
+    ];
+    if (crisis) {
+      lines.push(`\n⚠️ WAIT & SEE: Momentum belum valid. Jangan paksakan entry beli.`);
+      const zp = d.zona_pantau;
+      if (zp && Number.isFinite(Number(zp.bottom)) && Number.isFinite(Number(zp.top))) {
+        lines.push(`🎯 Zona Pantau: ${fmtLevel(zp.bottom)} – ${fmtLevel(zp.top)}${zp.desc ? ` (${zp.desc})` : ""}`);
+      }
+    } else {
+      if (agr?.level != null) lines.push(`\n⚡ Entry Agresif: ${fmtLevel(agr.level)}${agr.desc ? ` (${agr.desc})` : ""}`);
+      if (dem?.level != null) lines.push(`🛡️ Area Demand: ${fmtLevel(dem.level)}${dem.desc ? ` (${dem.desc})` : ""}`);
+      if (d.tp?.level != null) lines.push(`🎯 TP: ${fmtLevel(d.tp.level)}${d.tp.reason ? ` — ${d.tp.reason}` : ""}`);
+      if (d.sl?.level != null) lines.push(`🛑 SL: ${fmtLevel(d.sl.level)}${d.sl.reason ? ` — ${d.sl.reason}` : ""}`);
+    }
+    if (d.risk) lines.push(`\nRisiko: ${d.risk}`);
+    if (d.disclaimer) lines.push(`\n${d.disclaimer}`);
+    return lines.filter(Boolean).join("\n");
   };
 
   const copyAi = async () => {
@@ -383,8 +454,9 @@ export default function PivotAnalyzer() {
 
   // Efek "streaming": ketik narasi analisa bertahap saat hasil baru datang
   useEffect(() => {
-    if (!aiData?.analysis) { setAiTyped(""); return; }
-    const full = String(aiData.analysis);
+    const narrative = aiData?.analysis_text ?? aiData?.analysis; // schema baru → lama (fallback cache)
+    if (!narrative) { setAiTyped(""); return; }
+    const full = String(narrative);
     setAiTyped("");
     let i = 0;
     const id = setInterval(() => {
@@ -1034,18 +1106,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
     }
   };
 
-  // --- Pivot Ladder Row Config ----------------------------------------------
-  const pivotRows = result
-    ? [
-        { l: "R3", v: result.R3, c: "text-orange-500", b: "bg-orange-500/5", bar: "bg-orange-500/30" },
-        { l: "R2", v: result.R2, c: "text-orange-500", b: "bg-orange-500/5", bar: "bg-orange-500/30", supplyZoneAfter: true },
-        { l: "R1", v: result.R1, c: "text-orange-400", b: "bg-red-500/5",    bar: "bg-orange-400/30" },
-        { l: "PP", v: result.PP, c: "text-purple-500", b: "bg-purple-500/10",bar: "bg-purple-500/40" },
-        { l: "S1", v: result.S1, c: "text-green-400",  b: "bg-green-500/5",  bar: "bg-green-400/30", demandZoneAfter: true },
-        { l: "S2", v: result.S2, c: "text-green-500",  b: "bg-green-500/5",  bar: "bg-green-500/30" },
-        { l: "S3", v: result.S3, c: "text-green-500",  b: "bg-green-500/5",  bar: "bg-green-500/30" },
-      ]
-    : [];
+  // (Pivot Ladder kini display-only via <PivotCell>/<ZoneTag> — config lama dihapus.)
 
   // --- Giants Data ----------------------------------------------------------
   const GIANTS = useMemo(() => [
@@ -1197,27 +1258,44 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
         {/* -- Navigation Tabs ----------------------------------------------- */}
         <nav className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 backdrop-blur-md">
           {[
-            { id: "main",      label: "Analysis", icon: Zap     },
-            { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: null },
-            { id: "watchlist", label: "Watchlist", icon: Shield  },
-            { id: "average",   label: "Average",   icon: Calculator },
-            { id: "history",   label: "History",   icon: History },
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all duration-300 ${
-                tab === t.id
-                  ? t.id === 'giants'
-                      ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.5)]"
-                      : "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                  : "bg-slate-900/50 text-slate-400 border-transparent hover:text-purple-300"
-              }`}
-            >
-              {t.icon && <t.icon className={`w-3.5 h-3.5 flex-shrink-0`} />}
-              <span className="tracking-tight hidden xs:inline-block sm:inline-block">{t.label}</span>
-            </button>
-          ))}
+            { id: "main",      label: "Analysis", icon: Zap,        href: null },
+            { id: "news",      label: "News",     icon: Newspaper,  href: "/news" },
+            { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: null, href: null },
+            { id: "watchlist", label: "Watchlist", icon: Shield,    href: null },
+            { id: "average",   label: "Average",   icon: Calculator, href: null },
+            { id: "history",   label: "History",   icon: History,    href: null },
+          ].map((t) => {
+            const base = "flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all duration-300";
+            const inactive = "bg-slate-900/50 text-slate-400 border-transparent hover:text-purple-300";
+            const content = (
+              <>
+                {t.icon && <t.icon className="w-3.5 h-3.5 flex-shrink-0" />}
+                <span className="tracking-tight hidden xs:inline-block sm:inline-block">{t.label}</span>
+              </>
+            );
+            // Tombol "News" = navigasi route (Link), menyala ungu+glow saat di /news.
+            if (t.href) {
+              const active = pathname === t.href;
+              return (
+                <Link key={t.id} href={t.href}
+                  className={`${base} ${active ? "bg-purple-500 text-white shadow-[0_0_15px_rgba(147,51,234,0.6)]" : inactive}`}>
+                  {content}
+                </Link>
+              );
+            }
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`${base} ${
+                  tab === t.id
+                    ? t.id === 'giants'
+                        ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.5)]"
+                        : "bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                    : inactive
+                }`}>
+                {content}
+              </button>
+            );
+          })}
         </nav>
 
         {/* â•â• MAIN ANALYSIS TAB â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
@@ -1453,28 +1531,29 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                         <span className="text-[11px] font-black text-white flex-1 min-w-[140px]">{aiData.headline}</span>
                       </div>
 
-                      {/* Gauge keyakinan — angka % mengambang tepat di ujung bar terisi */}
-                      {aiData.confidence != null && (() => {
-                        const conf = Math.max(0, Math.min(100, Number(aiData.confidence) || 0));
-                        const col = aiData.sentiment === 'BULLISH' ? 'from-green-500 to-emerald-400'
-                          : aiData.sentiment === 'BEARISH' ? 'from-red-500 to-rose-400'
-                          : 'from-slate-500 to-slate-400';
-                        const markerLeft = Math.min(94, Math.max(6, conf)); // clamp biar bubble tak kepotong di tepi
+                      {/* Confidence Meter — skor Confluence dari backend (0-100) + klasifikasi */}
+                      {aiData.confluence_score != null && (() => {
+                        const score = Math.max(0, Math.min(100, Number(aiData.confluence_score) || 0));
+                        const label = aiData.confidence || '';
+                        const markerLeft = Math.min(96, Math.max(4, score));
+                        const badgeCls = score >= 81 ? 'text-green-300 border-green-400/50 bg-green-500/10 shadow-[0_0_12px_rgba(34,197,94,0.5)]'
+                          : score >= 61 ? 'text-emerald-300 border-emerald-400/40 bg-emerald-500/10'
+                          : score >= 41 ? 'text-yellow-300 border-yellow-400/40 bg-yellow-500/10'
+                          : score >= 21 ? 'text-orange-300 border-orange-400/40 bg-orange-500/10'
+                          : 'text-red-300 border-red-400/40 bg-red-500/10';
                         return (
                           <div>
-                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Keyakinan</div>
-                            <div className="relative pt-5">
-                              {/* bubble % di atas ujung fill */}
-                              <div
-                                className="absolute top-0 transition-all duration-700"
-                                style={{ left: `${markerLeft}%`, transform: 'translateX(-50%)' }}
-                              >
-                                <span className={`inline-block text-[10px] font-black tabular-nums text-white px-1.5 py-0.5 rounded-md bg-gradient-to-r ${col} shadow-[0_2px_8px_rgba(0,0,0,0.45)]`}>
-                                  {conf}%
-                                </span>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Confluence Score</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-white tabular-nums">{score}<span className="text-[10px] text-slate-500">/100</span></span>
+                                <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${badgeCls}`}>{label}</span>
                               </div>
-                              <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-white/5">
-                                <div className={`h-full bg-gradient-to-r ${col} rounded-full transition-all duration-700`} style={{ width: `${conf}%` }} />
+                            </div>
+                            <div className="relative">
+                              <div className="h-2.5 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 shadow-inner" />
+                              <div className="absolute -top-1 transition-all duration-700 ease-out" style={{ left: `${markerLeft}%`, transform: 'translateX(-50%)' }}>
+                                <div className="w-5 h-5 rounded-full bg-white border-2 border-slate-900 shadow-[0_0_10px_rgba(255,255,255,0.75)]" />
                               </div>
                             </div>
                           </div>
@@ -1482,53 +1561,75 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                       })()}
 
                       {/* Narasi (efek ketik) — whitespace-pre-line agar \n jadi baris/paragraf */}
-                      {aiData.analysis && (
+                      {(aiData.analysis_text ?? aiData.analysis) && (
                         <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-line">
                           {aiTyped}
-                          {aiTyped.length < String(aiData.analysis).length && <span className="text-purple-400 animate-pulse">▋</span>}
+                          {aiTyped.length < String(aiData.analysis_text ?? aiData.analysis).length && <span className="text-purple-400 animate-pulse">▋</span>}
                         </p>
                       )}
 
-                      {/* Chips Entry / TP / SL — menyusut jadi "Wait & See" saat setup tak valid */}
-                      {(aiData.entry || aiData.tp || aiData.sl || aiSetup.collapse) && (
-                        <div className="grid grid-cols-3 gap-2">
-                          {/* Entry — meluas full-width saat tak ada setup valid */}
-                          <div className={`p-2.5 rounded-xl border text-center ${
-                            aiSetup.collapse
-                              ? 'col-span-full bg-amber-500/10 border-amber-500/30'
-                              : 'bg-purple-500/10 border-purple-500/20'
-                          }`}>
-                            <div className={`flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest mb-0.5 ${aiSetup.collapse ? 'text-amber-300' : 'text-purple-300'}`}>
-                              <TrendingUp className="w-3 h-3" /> {aiSetup.collapse ? 'Wait & See' : 'Entry'}
-                            </div>
-                            {aiSetup.collapse ? (
-                              <>
-                                {!aiSetup.entryNA && (
-                                  <div className="text-[11px] font-black text-white break-words mb-1">Pantau: {aiData.entry}</div>
-                                )}
-                                <p className="text-[10px] font-bold text-amber-300/90 leading-snug">
-                                  ⚠️ WAIT &amp; SEE: Tidak ada setup entry yang valid saat ini. Pantau reaksi harga di level support terdekat.
-                                </p>
-                              </>
-                            ) : (
-                              <div className="text-[11px] font-black text-white break-words">{aiData.entry || '-'}</div>
-                            )}
+                      {/* Chips Entry / TP / SL — schema nested; menyusut jadi "Wait & See" saat crisis */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {/* ENTRY — 2 baris (Agresif + Area Demand); full-width "Wait & See" saat crisis */}
+                        <div className={`p-2.5 rounded-xl border ${
+                          aiSetup.collapse
+                            ? 'col-span-full bg-amber-500/10 border-amber-500/30 text-center'
+                            : 'bg-purple-500/10 border-purple-500/20'
+                        }`}>
+                          <div className={`flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest mb-1 ${aiSetup.collapse ? 'text-amber-300' : 'text-purple-300'}`}>
+                            <TrendingUp className="w-3 h-3" /> {aiSetup.collapse ? 'Wait & See' : 'Entry'}
                           </div>
-                          {/* TP & SL — disembunyikan saat setup tak valid */}
-                          {!aiSetup.collapse && (
-                            <>
-                              <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
-                                <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
-                                <div className="text-[11px] font-black text-green-300 break-words">{aiData.tp || '-'}</div>
+                          {aiSetup.collapse ? (
+                            <div className="space-y-2.5">
+                              <p className="text-[10px] font-bold text-amber-300/90 leading-snug">
+                                ⚠️ WAIT &amp; SEE: Momentum belum valid. Jangan paksakan entry beli — pantau reaksi harga di area support berikutnya.
+                              </p>
+                              {(() => {
+                                const zp = aiData.zona_pantau;
+                                const bottom = Number(zp?.bottom), top = Number(zp?.top);
+                                if (!(Number.isFinite(bottom) && Number.isFinite(top))) return null;
+                                return (
+                                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 shadow-[0_0_16px_rgba(245,158,11,0.25)]">
+                                    <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-amber-300">🎯 Zona Pantau</span>
+                                      <span className="text-sm font-black text-amber-200 tabular-nums">{fmtLevel(bottom)} – {fmtLevel(top)}</span>
+                                    </div>
+                                    {zp?.desc && <p className="text-[10px] text-amber-200/80 leading-snug text-center">{zp.desc}</p>}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] leading-snug">
+                                <span className="text-yellow-300 font-black">⚡ Agresif:</span>{' '}
+                                <span className="font-black text-white">{fmtLevel(aiSetup.agrLevel)}</span>
+                                {aiData.entry?.agresif?.desc && <span className="text-slate-400"> ({aiData.entry.agresif.desc})</span>}
                               </div>
-                              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
-                                <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
-                                <div className="text-[11px] font-black text-red-300 break-words">{aiData.sl || '-'}</div>
+                              <div className="text-[10px] leading-snug">
+                                <span className="text-emerald-300 font-black">🛡️ Area Demand:</span>{' '}
+                                <span className="font-black text-white">{fmtLevel(aiSetup.demLevel)}</span>
+                                {aiData.entry?.demand?.desc && <span className="text-slate-400"> ({aiData.entry.demand.desc})</span>}
                               </div>
-                            </>
+                            </div>
                           )}
                         </div>
-                      )}
+                        {/* TP & SL — level + reason (text-xs muted); disembunyikan saat crisis */}
+                        {!aiSetup.collapse && (
+                          <>
+                            <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
+                              <div className="text-[12px] font-black text-green-300 break-words">{fmtLevel(aiData.tp?.level)}</div>
+                              {aiData.tp?.reason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{aiData.tp.reason}</div>}
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
+                              <div className="text-[12px] font-black text-red-300 break-words">{fmtLevel(aiData.sl?.level)}</div>
+                              {aiData.sl?.reason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{aiData.sl.reason}</div>}
+                            </div>
+                          </>
+                        )}
+                      </div>
 
                       {aiData.keyLevels && <p className="text-[11px] text-slate-400"><span className="text-purple-400 font-bold">Level: </span>{aiData.keyLevels}</p>}
                       {aiData.risk && <p className="text-[11px] text-amber-400/90"><span className="font-bold">Risiko: </span>{aiData.risk}</p>}
@@ -1602,7 +1703,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                       <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">RRR Setup</p>
                         <p
-                          className={`text-xl font-black leading-tight ${planInvalid ? "text-slate-500 opacity-50" : "text-yellow-400"}`}
+                          className={`text-xl font-black leading-tight ${planInvalid ? "text-slate-500 opacity-40" : "text-yellow-400"}`}
                           style={planInvalid ? undefined : { textShadow: "0 0 24px rgba(234,179,8,0.55)" }}
                         >
                           1 : {calcRRR}
@@ -1658,202 +1759,110 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   )}
                 </div>
 
-                {/* Kalkulator Posisi — ukuran lot dari modal & risiko */}
-                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5">
+                {/* Smart Calculator — reaktif (live), formula lot standar IDX */}
+                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]">
                   <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-4">
                     <Calculator className="w-4 h-4 text-purple-500" /> Kalkulator Posisi
+                    <span className="text-[8px] text-purple-400/70 normal-case tracking-normal font-bold">· live</span>
                   </h3>
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div>
                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Modal (Rp)</label>
-                      <input
-                        type="number"
-                        value={capital}
-                        onChange={(e) => setCapital(e.target.value)}
-                        placeholder="cth: 10000000"
-                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
+                      <input type="number" value={capital} onChange={(e) => setCapital(e.target.value)} placeholder="cth: 10000000"
+                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500" />
                     </div>
                     <div>
                       <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Risiko / Trade (%)</label>
-                      <input
-                        type="number"
-                        value={riskPct}
-                        onChange={(e) => setRiskPct(e.target.value)}
-                        min="0.1" max="100" step="0.5"
-                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+                      <input type="number" value={riskPct} onChange={(e) => setRiskPct(e.target.value)} min="0.1" max="100" step="0.5"
+                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-purple-300/80 uppercase tracking-widest">Harga Entry <span className="text-slate-600 normal-case">(agresif)</span></label>
+                      <input type="number" value={calcEntry} onChange={(e) => setCalcEntry(e.target.value)} placeholder="auto dari AI"
+                        className="w-full mt-1 bg-slate-950 border border-purple-500/20 rounded-xl px-3 py-2 text-sm font-black text-purple-200 placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-red-300/80 uppercase tracking-widest">Harga SL</label>
+                      <input type="number" value={calcSL} onChange={(e) => setCalcSL(e.target.value)} placeholder="auto dari AI"
+                        className="w-full mt-1 bg-slate-950 border border-red-500/20 rounded-xl px-3 py-2 text-sm font-black text-red-300 placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500" />
                     </div>
                   </div>
                   {(() => {
-                    const entry = parseFloat(currentPrice) || parseFloat(close);
-                    const sl = result.S1;
-                    const cap = parseFloat(capital);
-                    const rPct = Math.max(0.1, Math.min(100, parseFloat(riskPct) || 2));
-                    const riskPerShare = entry - sl;
-                    if (isNaN(cap) || cap <= 0)
-                      return <p className="text-[11px] text-slate-500 leading-relaxed">Isi modal untuk menghitung jumlah lot yang aman sesuai risiko.</p>;
-                    if (!(riskPerShare > 0))
-                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ S1 berada di atas/sama dengan entry — belum jadi setup beli yang valid.</p>;
-                    const riskBudget = cap * (rPct / 100);
-                    const lots = Math.floor(riskBudget / riskPerShare / 100);
-                    const shares = lots * 100;
-                    const posValue = shares * entry;
-                    const potLoss = shares * riskPerShare;
-                    const potProfit = shares * (result.R1 - entry);
                     const fmt = (n) => Math.round(n).toLocaleString("id-ID");
-                    if (lots < 1)
-                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Modal/risiko terlalu kecil untuk 1 lot di harga ini. Naikkan modal atau % risiko.</p>;
+                    const modal = parseFloat(capital);
+                    const rPct = Math.max(0.1, Math.min(100, parseFloat(riskPct) || 2));
+                    const entry = parseFloat(calcEntry);
+                    const sl = parseFloat(calcSL);
+                    if (!(modal > 0))
+                      return <p className="text-[11px] text-slate-500 leading-relaxed">Isi <b className="text-slate-300">Modal</b> untuk menghitung posisi. Entry &amp; SL terisi otomatis dari analisa AI.</p>;
+                    if (!(Number.isFinite(entry) && Number.isFinite(sl)))
+                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Lengkapi Harga Entry &amp; SL (jalankan Analisa AI atau isi manual).</p>;
+                    const jarakSL = Math.abs(entry - sl);
+                    if (!(jarakSL > 0))
+                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Jarak Entry↔SL = 0. Beda-kan harga Entry dan SL.</p>;
+                    const nominalRisiko = modal * (rPct / 100);
+                    const lot = Math.floor(nominalRisiko / (jarakSL * 100));
+                    const shares = lot * 100;
+                    const posValue = shares * entry;
                     return (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 rounded-xl bg-slate-950/50 border border-purple-500/20 text-center">
-                          <div className="text-[8px] font-black text-purple-300 uppercase tracking-widest mb-0.5">Ukuran Posisi</div>
-                          <div className="text-lg font-black text-white">{fmt(lots)} <span className="text-[10px] text-slate-400">lot</span></div>
-                          <div className="text-[9px] text-slate-500">{fmt(shares)} lembar</div>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-center">
+                            <div className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-0.5">Maksimal Risiko</div>
+                            <div className="text-base font-black text-red-400" style={{ textShadow: "0 0 14px rgba(239,68,68,0.5)" }}>Rp {fmt(nominalRisiko)}</div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/25 text-center">
+                            <div className="text-[8px] font-black text-green-300 uppercase tracking-widest mb-0.5">Rekomendasi Posisi</div>
+                            <div className="text-lg font-black text-green-400 leading-none" style={{ textShadow: "0 0 16px rgba(34,197,94,0.55)" }}>
+                              {lot < 1 ? "0" : fmt(lot)} <span className="text-[10px] text-green-300/70">Lot</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="p-3 rounded-xl bg-slate-950/50 border border-white/10 text-center flex flex-col justify-center">
-                          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Nilai Posisi</div>
-                          <div className="text-base font-black text-slate-200">Rp {fmt(posValue)}</div>
-                        </div>
-                        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center flex flex-col justify-center">
-                          <div className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-0.5">Potensi Rugi (SL)</div>
-                          <div className="text-base font-black text-red-400">-Rp {fmt(potLoss)}</div>
-                        </div>
-                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-center flex flex-col justify-center">
-                          <div className="text-[8px] font-black text-green-300 uppercase tracking-widest mb-0.5">Potensi Untung (R1)</div>
-                          <div className="text-base font-black text-green-400">+Rp {fmt(potProfit)}</div>
-                        </div>
+                        {lot < 1 ? (
+                          <p className="text-[10px] text-amber-400/90 leading-relaxed">⚠️ Modal/risiko terlalu kecil untuk 1 lot pada jarak SL ini. Naikkan modal atau % risiko.</p>
+                        ) : (
+                          <p className="text-[9px] text-slate-500 leading-relaxed">≈ {fmt(shares)} lembar · Nilai posisi <span className="text-slate-300">Rp {fmt(posValue)}</span> · Risiko {fmt(jarakSL)}/lembar</p>
+                        )}
                       </div>
                     );
                   })()}
-                  <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">1 lot = 100 lembar. Entry pakai harga acuan, SL = S1, target = R1. Sesuaikan dengan kondisi nyata.</p>
+                  <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">1 lot = 100 lembar. Rumus: Lot = ⌊(Modal × Risiko%) ÷ (|Entry−SL| × 100)⌋. Entry &amp; SL auto dari AI, bisa diubah manual.</p>
                 </div>
 
-                {/* Visual Context (charts & broker) */}
+                {/* Level Kunci (Confluence Matrix) + News & Sentiment — mengisi ruang kartu lama */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <ErrorBoundary>
-                    <RiskRewardVisualizer
-                      entry={parseFloat(currentPrice) || parseFloat(close)}
-                      entryLow={entryZone?.low}
-                      entryHigh={entryZone?.high}
-                      stopLoss={result.S1}
-                      target={result.R1}
-                    />
-                  </ErrorBoundary>
-                  
-                  <div className="depth-3d bg-slate-800/20 p-5 rounded-2xl border border-white/10">
-                    <div className="flex justify-between items-center mb-4">
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Daily Sentiment (Pivot)</p>
-                        {(() => {
-                           const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
-                           const isMa20Bullish = trendContext?.isBullish;
-                           let badge = null;
-                           if (isPivotBullish && !isMa20Bullish) badge = "⚠️ Tech Rebound";
-                           if (!isPivotBullish && isMa20Bullish) badge = "⚠️ Sedang Koreksi";
-                           
-                           return (
-                             <div className="flex gap-2 items-center">
-                               {badge && (
-                                 <div className="px-2 py-1 rounded bg-orange-500/10 border border-orange-500/30 text-[9px] font-black text-orange-400 uppercase">
-                                   {badge}
-                                 </div>
-                               )}
-                               {confluence && (
-                                 <div className="px-2 py-1 rounded bg-green-500/10 border border-green-500/30 text-[9px] font-black text-green-400 uppercase animate-pulse">
-                                   {confluence.text}
-                                 </div>
-                               )}
-                             </div>
-                           );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          const isPivotBullish = parseFloat(currentPrice || close) > result.PP;
-                          const isMa20Bullish = trendContext?.isBullish;
-                          let theme = isPivotBullish ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400";
-                          let text = isPivotBullish ? "UPTREND" : "DOWNTREND";
-                          
-                          if (isPivotBullish && !isMa20Bullish) {
-                             theme = "bg-yellow-500/20 text-yellow-500";
-                             text = "REBOUND";
-                          } else if (!isPivotBullish && isMa20Bullish) {
-                             theme = "bg-orange-500/20 text-orange-400";
-                             text = "KOREKSI";
-                          }
-
-                          return (
-                            <>
-                              <div className={`p-2 rounded-lg ${theme}`}>
-                                {isPivotBullish ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                              </div>
-                              <div>
-                                <p className="text-lg font-black">{text}</p>
-                                <p className="text-[10px] text-slate-300 font-medium uppercase">
-                                  Price {isPivotBullish ? "above" : "below"} Pivot Point
-                                </p>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      {pattern && (
-                        <div className="mt-4 p-3 bg-slate-900 rounded-xl border border-white/5 flex items-start gap-3">
-                          <Info className="w-4 h-4 text-purple-500 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-black text-purple-400">{pattern.name} Detected</p>
-                            <p className="text-[10px] text-slate-300 font-medium">{pattern.description}</p>
-                          </div>
+                  {/* LEVEL KUNCI (CONFLUENCE MATRIX) */}
+                  <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]">
+                    <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <Table className="w-4 h-4 text-purple-500" /> Level Kunci
+                      <span className="text-[8px] text-slate-500 normal-case tracking-normal font-bold">Confluence Matrix</span>
+                    </h3>
+                    <div className="flex flex-col divide-y divide-white/5">
+                      {[
+                        { l: "Resistance 2 (R2)", v: result.R2, c: "text-orange-400" },
+                        { l: "Resistance 1 (R1)", v: result.R1, c: "text-orange-400" },
+                        { l: "Pivot Point", v: result.PP, c: "text-purple-300" },
+                        { l: "Support 1 (S1)", v: result.S1, c: "text-green-400" },
+                        { l: "Support 2 (S2)", v: result.S2, c: "text-green-400" },
+                        { l: "Harga MA20", v: parseFloat(ma20Price), c: "text-amber-400" },
+                      ].map((row) => (
+                        <div key={row.l} className="flex items-center justify-between py-2.5 px-1 rounded group hover:bg-white/5 transition-all">
+                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{row.l}</span>
+                          <span className={`text-sm font-black tabular-nums transition-all group-hover:scale-105 ${row.c}`}>
+                            {Number.isFinite(row.v) && row.v > 0 ? fmt(row.v) : "—"}
+                          </span>
                         </div>
-                      )}
+                      ))}
                     </div>
+                    <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">Level acuan teknikal utama untuk konfirmasi entry/exit.</p>
+                  </div>
+
+                  {/* NEWS & SENTIMENT ANALYZER (mock — sambungkan Supabase via /api/market-sentiment) */}
+                  <NewsSentimentAnalyzer ticker={stockCode} limit={3} />
                 </div>
 
-                <div className="mt-2 text-center text-xs opacity-0"></div>
-
-                {/* == TRADINGSTARS AI SIGNAL == */}
-                {(() => {
-                   const cp = parseFloat(currentPrice || close);
-                   if (!result || isNaN(cp)) return null;
-
-                   const volStrong = volume && ma20Volume && parseFloat(volume) > parseFloat(ma20Volume);
-                   const isBull = cp > result.PP;
-                   const volatility = (result.R3 - result.S3) / result.S3;
-                   const isTrendUp = isBull && trendContext?.isBullish;
-                   
-                   let sig = null;
-                   
-                   if (cp >= result.R2 * 0.99) {
-                       sig = { text: "TAKE PROFIT: Reached Target Res 2", style: "border-yellow-500/50 bg-yellow-500/10 text-yellow-400", icon: <AlertCircle className="w-5 h-5 text-yellow-400"/> };
-                   } else if (volatility > 0.1) {
-                       sig = { text: "WAIT & SEE: High Volatility", style: "border-slate-500/50 bg-slate-500/10 text-slate-300", icon: <Activity className="w-5 h-5 text-slate-400"/> };
-                   } else if (cp <= result.S1 * 1.02 && cp >= result.S1 * 0.95 && volStrong) {
-                       sig = { text: "BUY ON WEAKNESS: Area Supp 1", style: "border-green-500/50 bg-green-500/10 text-green-400", icon: <TrendingUp className="w-5 h-5 text-green-400"/> };
-                   } else if (isTrendUp) {
-                       sig = { text: "HOLD: Strong Bullish Momentum", style: "border-blue-500/50 bg-blue-500/10 text-blue-400", icon: <Target className="w-5 h-5 text-blue-400"/> };
-                   } else {
-                       sig = { 
-                           text: isBull ? "MONITOR: Bullish Bias" : "CAUTION: Bearish Bias",
-                           style: isBull ? "border-purple-500/30 bg-purple-500/10 text-purple-400" : "border-orange-500/30 bg-orange-500/10 text-orange-400",
-                           icon: isBull ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />
-                       };
-                   }
-
-                   return (
-                     <div className={`p-4 rounded-3xl border flex items-center gap-4 depth-3d animate-in zoom-in-95 duration-500 ${sig.style}`}>
-                        <div className="p-3 rounded-2xl bg-slate-950/40 border border-inherit shadow-inner">
-                           {sig.icon}
-                        </div>
-                        <div>
-                           <div className="flex items-center gap-1.5 mb-1.5">
-                             <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                             <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-80">TradingStars AI Signal</p>
-                           </div>
-                           <p className="text-sm font-black tracking-wide leading-tight">{sig.text}</p>
-                        </div>
-                     </div>
-                   );
-                })()}
+                {/* Banner "TradingStars AI Signal" & kartu "Daily Sentiment" dihapus —
+                    sinyal kini terkonsolidasi di kartu Analisa AI + Trend Confluence. */}
 
                 {/* Panel Analisis VCP & Multi-Timeframe Trend */}
                 {vcpData ? (
@@ -1886,7 +1895,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
 
                 {/* â•â• PIVOT LADDER with Demand / Supply Zones â•â•â•â•â•â•â•â•â•â•â•â• */}
                 <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 overflow-hidden">
-                  {/* Ladder Header */}
+                  {/* Header */}
                   <div className="bg-slate-900/60 px-5 py-4 border-b border-white/5 flex items-center justify-between">
                     <h3 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-2">
                       <Table className="w-4 h-4 text-purple-500" /> Pivot Ladder
@@ -1894,92 +1903,46 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-red-400" />
-                        <span className="text-[9px] font-black text-slate-300 uppercase">Zona Jual (Supply)</span>
+                        <span className="text-[9px] font-black text-slate-300 uppercase">Premium</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-green-400" />
-                        <span className="text-[9px] font-black text-slate-300 uppercase">Zona Beli (Demand)</span>
+                        <span className="text-[9px] font-black text-slate-300 uppercase">Discount</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Rows */}
-                  <div className="divide-y divide-white/5">
-                    {pivotRows.map((row) => (
-                      <React.Fragment key={row.l}>
-                        {/* -- Normal Pivot Row -- */}
-                        <div className={`flex items-center justify-between px-4 py-3.5 group hover:bg-white/5 transition-all ${row.b}`}>
-                          <div className="flex items-center gap-3">
-                            {/* Label badge */}
-                            <span className={`w-8 text-[10px] font-black p-1 rounded text-center border border-current/20 flex-shrink-0 ${row.c}`}>
-                              {row.l}
-                            </span>
-                            {/* Mini progress bar - hidden on very small screens */}
-                            <div className="w-14 h-1.5 bg-slate-800 rounded-full overflow-hidden hidden xs:block sm:block">
-                              <div
-                                className={`h-full rounded-full ${row.bar} transition-all duration-700`}
-                                style={{
-                                  width: `${Math.min(100, Math.max(8,
-                                    ((row.v - result.S3) / Math.max(result.R3 - result.S3, 1)) * 100
-                                  ))}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">
-                              {row.l === "PP"
-                                ? "Harga Tengah (Pivot)"
-                                : row.l.startsWith("R")
-                                ? "Target Jual (Res)"
-                                : "Area Beli (Supp)"}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-sm font-black transition-all group-hover:scale-110 ${row.c}`}>{fmt(row.v)}</p>
-                            {(() => {
-                              const cp = parseFloat(currentPrice) || parseFloat(close);
-                              if (!cp || isNaN(cp)) {
-                                return <p className="text-[9px] text-slate-400 font-medium uppercase mt-0.5">Price Point</p>;
-                              }
-                              const diffPct = ((row.v - cp) / cp) * 100;
-                              const isPos = diffPct > 0;
-                              const isZero = Math.abs(diffPct) < 0.01;
-                              const color = isPos ? "text-green-400" : isZero ? "text-slate-400" : "text-orange-400";
-                              const sign = isPos ? "+" : "";
-                              return (
-                                <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                                  <p className="text-[9px] text-slate-400 font-medium uppercase">Price Point</p>
-                                  <span className={`text-[9px] font-black tracking-tighter bg-slate-900/50 px-1 py-0.5 rounded border border-white/5 ${color}`}>
-                                    {isZero ? "0.00%" : `${sign}${diffPct.toFixed(2)}%`}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </div>
+                  {/* Grid 2 zona + PP di tengah */}
+                  <div className="relative grid grid-cols-[1fr_auto_1fr] gap-2 sm:gap-4 p-5 items-center overflow-hidden">
+                    {/* Watermark zona (samar) */}
+                    <span className="pointer-events-none select-none absolute left-2 top-1/2 -translate-y-1/2 -rotate-90 text-2xl sm:text-4xl font-black uppercase tracking-widest text-red-500/[0.06] whitespace-nowrap">Premium Zone</span>
+                    <span className="pointer-events-none select-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-2xl sm:text-4xl font-black uppercase tracking-widest text-green-500/[0.06] whitespace-nowrap">Discount Zone</span>
 
-                        {/* -- Supply Area Zone Banner (after R2, before R1) -- */}
-                        {row.supplyZoneAfter && (
-                          <div className="relative bg-red-500/10 border-l-4 border-red-500/40 px-5 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">▲ Zona Jual (Supply)</span>
-                            </div>
-                            <span className="text-[9px] text-red-400/60 font-medium italic">R1 - R2 Zone</span>
-                          </div>
-                        )}
+                    {/* PREMIUM (kiri): R3, R2, Zona Supply, R1 */}
+                    <div className="relative z-10 flex flex-col gap-2">
+                      <PivotCell label="R3" value={result.R3} tone="supply" />
+                      <PivotCell label="R2" value={result.R2} tone="supply" />
+                      <ZoneTag text="Zona Supply" tone="red" />
+                      <PivotCell label="R1" value={result.R1} tone="supply" />
+                    </div>
 
-                        {/* -- Demand Area Zone Banner (after S1, before S2) -- */}
-                        {row.demandZoneAfter && (
-                          <div className="relative bg-green-500/10 border-l-4 border-green-500/40 px-5 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                              <span className="text-[9px] font-black text-green-400 uppercase tracking-widest">▼ Zona Beli (Demand)</span>
-                            </div>
-                            <span className="text-[9px] text-green-400/60 font-medium italic">S1 - S2 Zone</span>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    ))}
+                    {/* PP (tengah) */}
+                    <div className="relative z-10 flex flex-col items-center justify-center px-1">
+                      <div className="px-3 sm:px-4 py-3 rounded-2xl bg-purple-500/15 border border-purple-500/40 text-center shadow-[0_0_20px_rgba(168,85,247,0.25)]">
+                        <div className="text-[10px] font-black text-purple-300 uppercase tracking-widest">PP</div>
+                        <div className="text-base sm:text-lg font-black text-purple-100 tabular-nums leading-none mt-1">{fmt(result.PP)}</div>
+                      </div>
+                      <div className="w-px h-3 bg-purple-500/30 my-1" />
+                      <span className="text-[8px] font-black text-purple-300/60 uppercase tracking-widest">Pivot</span>
+                    </div>
+
+                    {/* DISCOUNT (kanan): S1, Zona Demand, S2, S3 */}
+                    <div className="relative z-10 flex flex-col gap-2">
+                      <PivotCell label="S1" value={result.S1} tone="demand" />
+                      <ZoneTag text="Zona Demand" tone="green" />
+                      <PivotCell label="S2" value={result.S2} tone="demand" />
+                      <PivotCell label="S3" value={result.S3} tone="demand" />
+                    </div>
                   </div>
                 </div>
 

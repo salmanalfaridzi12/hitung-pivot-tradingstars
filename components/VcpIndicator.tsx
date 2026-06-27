@@ -21,7 +21,7 @@ const BADGE: Record<VcpStatus, BadgeStyle> = {
     dot: "bg-green-400 shadow-[0_0_8px_#22c55e] animate-pulse",
   },
   DEVELOPING: {
-    label: "VCP: Sedang Terbentuk",
+    label: "VCP: Kontraksi Bertahap",
     badge: "text-yellow-300 border-yellow-400/40 bg-yellow-500/10",
     dot: "bg-yellow-400",
   },
@@ -45,8 +45,16 @@ export default function VcpIndicator({ data }: VcpIndicatorProps): React.JSX.Ele
     );
   }
 
+  // Tahap kontraksi (data-driven): jumlah leg yang terdeteksi menentukan stage aktif.
+  const nContractions = contractions.length;
+  const stages = [
+    { label: "C1 (Selesai)", lit: nContractions >= 1, cls: "text-green-300 border-green-400/50 bg-green-500/10 shadow-[0_0_10px_rgba(34,197,94,0.4)]" },
+    { label: "C2 (Aktif)", lit: nContractions >= 2, cls: "text-amber-300 border-amber-400/50 bg-amber-500/10 shadow-[0_0_10px_rgba(245,158,11,0.45)] animate-pulse" },
+    { label: "C3 (Terjadwal)", lit: nContractions >= 3, cls: "text-slate-300 border-white/15 bg-slate-500/10" },
+  ];
+
   return (
-    <div className="rounded-2xl border border-purple-500/30 bg-black/40 backdrop-blur-xl p-5 shadow-xl shadow-black/40 h-full">
+    <div className="rounded-2xl border border-purple-500/30 bg-black/40 backdrop-blur-md p-5 shadow-xl shadow-black/40 h-full transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.3)]">
       {/* Header + badge status */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <h3 className="text-xs font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
@@ -86,6 +94,18 @@ export default function VcpIndicator({ data }: VcpIndicatorProps): React.JSX.Ele
           Belum ada pola kontraksi yang valid pada 120 hari bursa terakhir.
         </p>
       )}
+
+      {/* Tahap kontraksi: C1 (Selesai) · C2 (Aktif) · C3 (Terjadwal) */}
+      <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+        {stages.map((s) => (
+          <span
+            key={s.label}
+            className={`px-2 py-1 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all ${s.cls} ${s.lit ? "" : "opacity-40 grayscale"}`}
+          >
+            {s.label}
+          </span>
+        ))}
+      </div>
 
       {/* Catatan kontekstual */}
       <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">

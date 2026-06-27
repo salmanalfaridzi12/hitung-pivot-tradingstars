@@ -11,6 +11,55 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const DISCLAIMER =
   "⚠️ Analisa AI ini bersifat edukatif, BUKAN nasihat finansial. Pasar berisiko — keputusan jual/beli sepenuhnya tanggung jawab Anda.";
 
+// ── Confluence Score (sumber kebenaran = backend, BUKAN Gemini) ─────────────
+// Gemini hanya analisa kualitatif (sentiment). Skor dihitung deterministik di sini.
+type SmcSignal = "STRONG" | "MODERATE" | "WEAK";
+
+// Derive kekuatan SMC dari indikator teknikal (struktur, tren, volume, breakout).
+function deriveSmcSignal(ohlc: any, pivots: any, currentPrice: any): SmcSignal {
+  const cp = Number(currentPrice ?? ohlc?.close);
+  const ma20 = Number(ohlc?.ma20Price);
+  const vol = Number(ohlc?.volume);
+  const volMa = Number(ohlc?.ma20Volume);
+  const open = Number(ohlc?.open);
+  const close = Number(ohlc?.close);
+  let n = 0;
+  if (Number.isFinite(cp) && Number.isFinite(pivots?.PP) && cp > pivots.PP) n++; // struktur bullish (BoS)
+  if (Number.isFinite(cp) && Number.isFinite(ma20) && cp > ma20) n++;            // tren di atas MA20
+  if (Number.isFinite(vol) && Number.isFinite(volMa) && vol > volMa) n++;        // konfirmasi volume / liquidity
+  if (Number.isFinite(cp) && Number.isFinite(pivots?.R1) && cp >= pivots.R1) n++;// breakout R1 (liquidity sweep)
+  if (Number.isFinite(close) && Number.isFinite(open) && close > open) n++;      // candle bullish (ChoCh-ish)
+  if (n >= 4) return "STRONG";
+  if (n >= 2) return "MODERATE";
+  return "WEAK";
+}
+
+// Skor 0-100: Trend(+20) Volume(+20) Sentiment(+30) SMC(+30).
+function computeConfluence(ohlc: any, pivots: any, currentPrice: any, sentiment: any) {
+  const cp = Number(currentPrice ?? ohlc?.close);
+  const ma20 = Number(ohlc?.ma20Price);
+  const vol = Number(ohlc?.volume);
+  const volMa = Number(ohlc?.ma20Volume);
+  const smc = deriveSmcSignal(ohlc, pivots, currentPrice);
+  let score = 0;
+  if (Number.isFinite(cp) && Number.isFinite(ma20) && cp > ma20) score += 20;
+  if (Number.isFinite(vol) && Number.isFinite(volMa) && vol > volMa) score += 20;
+  const s = String(sentiment ?? "").toUpperCase();
+  if (s.includes("BULLISH")) score += 30;
+  else if (s.includes("KONSOLIDASI")) score += 15;
+  if (smc === "STRONG") score += 30;
+  else if (smc === "MODERATE") score += 15;
+  return { confluence_score: Math.min(score, 100), smc_signal: smc };
+}
+
+function confidenceLabel(score: number): string {
+  if (score <= 20) return "Very Weak";
+  if (score <= 40) return "Weak";
+  if (score <= 60) return "Neutral";
+  if (score <= 80) return "Strong";
+  return "Very Strong";
+}
+
 export async function POST(req: Request) {
   // Proteksi: di production wajib sudah login (punya cookie session) supaya
   // endpoint tidak bisa di-spam publik & menghabiskan kuota/biaya Gemini.
@@ -68,8 +117,13 @@ Volume: ${ohlc.volume ?? "-"} (MA20 Volume: ${ohlc.ma20Volume ?? "-"})
 MA20 Price: ${ohlc.ma20Price ?? "-"}
 Pivot Point: PP ${pivots.PP} | Resistance R1 ${pivots.R1} R2 ${pivots.R2} R3 ${pivots.R3} | Support S1 ${pivots.S1} S2 ${pivots.S2} S3 ${pivots.S3}
 ${ctx ? ctx + "\n" : ""}
-Balas HANYA dengan JSON valid (tanpa teks lain), struktur:
-{"sentiment":"BULLISH|BEARISH|NETRAL","confidence":<angka 0-100, tingkat keyakinan analisa>,"headline":"ringkasan 1 kalimat","analysis":"2-4 kalimat analisa teknikal","keyLevels":"level support/resistance penting yang dipantau","entry":"area harga entry yang disarankan","tp":"target profit (boleh lebih dari satu, pisah koma)","sl":"level stop loss","risk":"1 kalimat catatan risiko utama"}`;
+Balas HANYA dengan JSON valid (tanpa teks/markdown lain), struktur PERSIS:
+{"sentiment":"BULLISH|BEARISH|KONSOLIDASI|wait_and_see","headline":"ringkasan 1 kalimat","entry":{"agresif":{"level":<angka harga atau "N/A">,"desc":"alasan singkat, mis. breakout R1"},"demand":{"level":<angka harga atau "N/A">,"desc":"alasan singkat, mis. batas bawah area demand/support"}},"tp":{"level":<angka harga atau "N/A">,"reason":"alasan teknikal target ini"},"sl":{"level":<angka harga atau "N/A">,"reason":"alasan teknikal, mis. di bawah MA20/S1"},"analysis_text":"narasi analisa teknikal 2-4 kalimat; pisahkan poin dengan \\n bila perlu","zona_pantau":{"bottom":<angka harga>,"top":<angka harga>,"desc":"deskripsi singkat area pantau"},"keyLevels":"level kunci yang dipantau","risk":"1 kalimat catatan risiko utama"}
+ATURAN:
+- Jika sentiment "BEARISH" atau "wait_and_see": set SEMUA level entry/tp/sl ke "N/A", dan WAJIB isi zona_pantau dengan area SUPPORT TERKUAT di bawah harga saat ini tempat trader bersiap memantau potensi rebound (bottom < top).
+- Jika "BULLISH"/"KONSOLIDASI": zona_pantau boleh area demand terdekat sebagai zona re-entry.
+- Narasi analysis_text harus profesional, edukatif, ringkas, dan menyebut istilah teknikal relevan secara natural: SMC, Break of Structure (BoS), Change of Character (ChoCh), Liquidity, Order Block, VCP.
+- JANGAN menghitung skor confluence — kamu hanya melakukan analisa kualitatif.`;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -107,10 +161,19 @@ Balas HANYA dengan JSON valid (tanpa teks lain), struktur:
       parsed = { sentiment: "NETRAL", headline: "Ringkasan", analysis: text };
     }
 
+    // Confluence Score dihitung di server (sumber kebenaran), bukan dari Gemini.
+    const { confluence_score, smc_signal } = computeConfluence(ohlc, pivots, currentPrice, parsed?.sentiment);
+
     return NextResponse.json({
       ok: true,
       model: MODEL,
-      analysis: { ...parsed, disclaimer: DISCLAIMER },
+      analysis: {
+        ...parsed,
+        disclaimer: DISCLAIMER,
+        confluence_score,
+        confidence: confidenceLabel(confluence_score),
+        smc_signal,
+      },
     });
   } catch (err: any) {
     // Pesan error @google/genai sering berupa string JSON — ambil pesan manusiawinya.
