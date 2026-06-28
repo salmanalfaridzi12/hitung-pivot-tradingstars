@@ -17,12 +17,15 @@ import { sanitizeOHLCV } from "../utils/vcp";
 import { analyzeOrderBlocks } from "../utils/orderBlocks";
 import { analyzeFairValueGaps } from "../utils/fairValueGaps";
 import { buildMarketMap } from "../utils/marketMap";
+import { analyzeLiquidity } from "../utils/liquidityEngine";
+import { computeInstitutionalConfluence } from "../utils/institutionalConfluence";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
 const LiquidityMap = dynamic(() => import("../components/LiquidityMap"), { ssr: false });
 const OrderBlockPanel = dynamic(() => import("../components/OrderBlockPanel"), { ssr: false });
 const FairValueGapPanel = dynamic(() => import("../components/FairValueGapPanel"), { ssr: false });
+const InstitutionalConfluencePanel = dynamic(() => import("../components/InstitutionalConfluencePanel"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -341,21 +344,41 @@ export default function PivotAnalyzer() {
     return { isBearish, isWaitSee, isKonsolidasi, agrLevel, demLevel, entryNA, tpNA, slNA, noTargets, collapse, invalid: collapse || noTargets };
   }, [aiData]);
 
-  // P17 · Module 3: order blocks dari histori (dipakai panel + overlay chart).
+  // P17: struktur pasar dari satu sumber (reuse di FVG + Confluence).
+  const marketMapData = useMemo(() => {
+    const cp = parseFloat(currentPrice) || parseFloat(close);
+    if (!result || !Number.isFinite(cp) || cp <= 0) return null;
+    return buildMarketMap({ pivots: result, currentPrice: cp, ma20: parseFloat(ma20Price) || null, volume: parseFloat(volume) || null, ma20Volume: parseFloat(ma20Volume) || null });
+  }, [result, currentPrice, close, ma20Price, volume, ma20Volume]);
+
+  // P17 · Module 1: liquidity (dipakai Confluence; panel menghitung sendiri).
+  const liquidityData = useMemo(
+    () => (vcpData && vcpData.length >= 12 ? analyzeLiquidity(vcpData) : null),
+    [vcpData]
+  );
+
+  // P17 · Module 3: order blocks dari histori (panel + overlay chart + Confluence).
   const orderBlocksData = useMemo(
     () => (vcpData && vcpData.length >= 10 ? analyzeOrderBlocks(vcpData) : null),
     [vcpData]
   );
 
   // P17 · Module 4: Fair Value Gaps (reuse fase Market Map untuk prioritas).
-  const fvgData = useMemo(() => {
-    if (!vcpData || vcpData.length < 5) return null;
+  const fvgData = useMemo(
+    () => (vcpData && vcpData.length >= 5 ? analyzeFairValueGaps(vcpData, { phase: marketMapData?.phase ?? null }) : null),
+    [vcpData, marketMapData]
+  );
+
+  // P17 · Module 5: Institutional Confluence — gabungan deterministik semua engine.
+  const confluenceData = useMemo(() => {
     const cp = parseFloat(currentPrice) || parseFloat(close);
-    const phase = (result && Number.isFinite(cp))
-      ? (buildMarketMap({ pivots: result, currentPrice: cp, ma20: parseFloat(ma20Price) || null })?.phase ?? null)
-      : null;
-    return analyzeFairValueGaps(vcpData, { phase });
-  }, [vcpData, result, currentPrice, close, ma20Price]);
+    if (!result || !Number.isFinite(cp) || cp <= 0) return null;
+    return computeInstitutionalConfluence({
+      pivots: result, currentPrice: cp,
+      ma20: parseFloat(ma20Price) || null, volume: parseFloat(volume) || null, ma20Volume: parseFloat(ma20Volume) || null,
+      history: vcpData, liquidity: liquidityData, orderBlocks: orderBlocksData, fvg: fvgData, marketMap: marketMapData,
+    });
+  }, [result, currentPrice, close, ma20Price, volume, ma20Volume, vcpData, liquidityData, orderBlocksData, fvgData, marketMapData]);
 
   // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
   // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
@@ -1973,6 +1996,11 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                 {/* P17 · Module 4: Institutional Fair Value Gap Engine */}
                 <ErrorBoundary>
                   <FairValueGapPanel data={vcpData} loading={!vcpData} precomputed={fvgData} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 5: Institutional Confluence Engine (single source of truth) */}
+                <ErrorBoundary>
+                  <InstitutionalConfluencePanel result={confluenceData} loading={!result} />
                 </ErrorBoundary>
 
                 <ErrorBoundary>
