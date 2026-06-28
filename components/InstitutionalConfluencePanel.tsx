@@ -84,7 +84,16 @@ export default function InstitutionalConfluencePanel({ result, loading }: Props)
       <div className="flex items-center gap-4 flex-wrap mb-4">
         <RadialGauge value={r.overallScore} label="Confluence" size={96} />
         <div className="flex flex-col gap-2">
-          <span className={`px-3 py-1 rounded-full border text-[12px] font-black uppercase tracking-widest w-fit ${gradeColor(r.institutionalGrade)}`}>{r.institutionalGrade}</span>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full border text-[12px] font-black uppercase tracking-widest w-fit ${gradeColor(r.institutionalGrade)}`}>{r.institutionalGrade}</span>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("open-copilot", { detail: { question: "Jelaskan Confluence Score ini: kenapa nilainya segini, faktor apa yang paling berpengaruh, dan apa yang menahannya?", focus: "Confluence" } }))}
+              className="text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-md border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-all"
+              aria-label="Tanya Copilot tentang Confluence"
+            >
+              Why?
+            </button>
+          </div>
           <p className="text-[10px] text-slate-400 leading-snug max-w-[220px]">{r.summaryFactors[1]}</p>
         </div>
         <div className="flex gap-3 ml-auto">

@@ -27,6 +27,7 @@ const OrderBlockPanel = dynamic(() => import("../components/OrderBlockPanel"), {
 const FairValueGapPanel = dynamic(() => import("../components/FairValueGapPanel"), { ssr: false });
 const InstitutionalConfluencePanel = dynamic(() => import("../components/InstitutionalConfluencePanel"), { ssr: false });
 const InstitutionalAIAnalysis = dynamic(() => import("../components/InstitutionalAIAnalysis"), { ssr: false });
+const InstitutionalCopilot = dynamic(() => import("../components/InstitutionalCopilot"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -2616,6 +2617,9 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
           </div>
         );
       })()}
+
+      {/* P17 · Module 7: Institutional AI Copilot (floating, always available) */}
+      <InstitutionalCopilot input={aiValidatorInput} />
     </main>
   );
 }
