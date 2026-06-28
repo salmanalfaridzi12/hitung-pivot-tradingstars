@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { MOCK_MARKET_SENTIMENT, filterByTicker } from "../../../lib/marketSentiment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Ambil sentimen pasar terbaru, opsional difilter `?ticker=BBCA`.
-// Sumber utama Supabase (saat ENV diset); fallback ke mock statis bila Supabase
-// tidak terkonfigurasi atau gagal — agar app tidak pernah crash saat review.
+// Phase 17.2 (Zero Mock): SATU sumber data — Supabase. Bila Supabase tidak
+// terkonfigurasi/gagal, kembalikan data KOSONG dengan source "unavailable".
+// TIDAK ada fallback mock. UI menampilkan "No market sentiment data available."
 export async function GET(req: Request) {
   const ticker = new URL(req.url).searchParams.get("ticker");
 
@@ -26,13 +26,12 @@ export async function GET(req: Request) {
       if (!error && data) {
         return NextResponse.json({ ok: true, source: "supabase", ticker: ticker || null, data });
       }
-      // error → jatuh ke fallback di bawah
+      // error → unavailable di bawah (TANPA mock)
     } catch {
-      // paket/koneksi gagal → fallback
+      // paket/koneksi gagal → unavailable (TANPA mock)
     }
   }
 
-  // --- Fallback mock (filter sisi server juga) -----------------------------
-  const data = filterByTicker(MOCK_MARKET_SENTIMENT, ticker);
-  return NextResponse.json({ ok: true, source: "mock", ticker: ticker || null, data });
+  // Phase 17.2 (Zero Mock): Supabase tidak tersedia → data KOSONG, source "unavailable".
+  return NextResponse.json({ ok: true, source: "unavailable", ticker: ticker || null, data: [] });
 }

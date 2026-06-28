@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { analyzeOrderBlocks, type OrderBlock, type OrderBlockResult, type OBStatus } from "../utils/orderBlocks";
-import type { OHLCV } from "../utils/vcp";
+import React from "react";
+import type { OrderBlock, OrderBlockResult, OBStatus } from "../utils/orderBlocks";
+import DataSourceBadge from "./DataSourceBadge";
+import { requirePipelineProp } from "../utils/invariant";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI — tidak menjalankan
+// Order Block Engine. Hasil diterima via props dari orchestrator (page.jsx).
 interface Props {
-  data?: OHLCV[] | null;
+  /** Output Order Block Engine dari pipeline (null = belum/ tak cukup data). WAJIB di-supply. */
+  result?: OrderBlockResult | null;
   loading?: boolean;
 }
 
@@ -22,6 +26,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="depth-3d bg-black/40 backdrop-blur-md rounded-3xl border border-purple-500/20 p-5 transition-all hover:shadow-[0_0_18px_rgba(168,85,247,0.25)]">
     <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2 mb-4">
       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Institutional Order Blocks
+      <DataSourceBadge source="Order Block Engine" />
     </h3>
     {children}
   </div>
@@ -65,13 +70,10 @@ function BlockCard({ ob, nearest }: { ob: OrderBlock; nearest: boolean }): React
   );
 }
 
-export default function OrderBlockPanel({ data, loading }: Props): React.JSX.Element {
-  const result = useMemo<OrderBlockResult | "error" | null>(() => {
-    if (!data || data.length < 10) return null;
-    try { return analyzeOrderBlocks(data); } catch { return "error"; }
-  }, [data]);
+export default function OrderBlockPanel({ result: resultProp, loading }: Props): React.JSX.Element {
+  const result = requirePipelineProp(resultProp, "result", "OrderBlockPanel"); // invariant: orchestrator wajib supply
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <Shell>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-pulse" aria-busy="true" aria-label="Memuat order block">
@@ -79,9 +81,6 @@ export default function OrderBlockPanel({ data, loading }: Props): React.JSX.Ele
         </div>
       </Shell>
     );
-  }
-  if (result === "error") {
-    return <Shell><p className="text-[11px] text-red-400/90 leading-relaxed" role="alert">Gagal menghitung order block. Coba analisa ulang.</p></Shell>;
   }
   if (!result || (result.bullish.length === 0 && result.bearish.length === 0)) {
     return <Shell><p className="text-[11px] text-slate-500 leading-relaxed">Belum ada order block signifikan pada data historis terakhir.</p></Shell>;

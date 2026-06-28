@@ -1,20 +1,20 @@
 // Phase 17 · Module 2 — orchestrator AI Institutional Validator (client).
 // Alur: kompres data deterministik → cache → POST /api/institutional-ai (Gemini)
-// → validasi Zod → retry sekali → fallback deterministik. Tidak ada kalkulasi AI.
+// → validasi Zod → retry sekali. Tidak ada kalkulasi AI.
+// Phase 17.2 (Zero Mock): TIDAK ada fallback deterministik. Bila Gemini gagal,
+// lempar error → UI menampilkan state "AI Analysis Unavailable" (tanpa fabrikasi).
 
 import {
   InstitutionalAnalysisSchema, compressForAI, aiCacheKey,
   type InstitutionalAnalysis, type ValidatorInput, type CompressedPayload,
 } from "./institutionalSchema";
-import { fallbackInstitutionalAnalysis } from "./fallbackInstitutionalAnalysis";
 
-export type AnalysisSource = "ai" | "cache" | "fallback";
+export type AnalysisSource = "ai" | "cache";
 
 export interface Telemetry {
   responseTimeMs: number;
   cacheHit: boolean;
   retryCount: number;
-  fallbackUsed: boolean;
   source: AnalysisSource;
 }
 
@@ -48,12 +48,13 @@ export async function getInstitutionalAnalysis(
 
   const cached = cache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL) {
-    return { analysis: cached.analysis, telemetry: { responseTimeMs: Date.now() - start, cacheHit: true, retryCount: 0, fallbackUsed: false, source: "cache" } };
+    return { analysis: cached.analysis, telemetry: { responseTimeMs: Date.now() - start, cacheHit: true, retryCount: 0, source: "cache" } };
   }
 
   const payload = compressForAI(input);
   const timeoutMs = opts.timeoutMs ?? 25000;
   let attempts = 0;
+  let lastError = "";
 
   while (attempts < 2) {
     attempts++;
@@ -69,17 +70,16 @@ export async function getInstitutionalAnalysis(
       const parsed = InstitutionalAnalysisSchema.safeParse(raw);
       if (parsed.success) {
         cache.set(key, { at: Date.now(), analysis: parsed.data });
-        return { analysis: parsed.data, telemetry: { responseTimeMs: Date.now() - start, cacheHit: false, retryCount: attempts - 1, fallbackUsed: false, source: "ai" } };
+        return { analysis: parsed.data, telemetry: { responseTimeMs: Date.now() - start, cacheHit: false, retryCount: attempts - 1, source: "ai" } };
       }
-      // JSON tak sesuai schema → retry (kalau masih ada attempt)
-    } catch {
+      lastError = "Format respons AI tidak valid."; // JSON tak sesuai schema → retry bila masih ada attempt
+    } catch (e: any) {
       clearTimeout(timer);
-      // error/timeout/abort → retry (kalau masih ada attempt)
+      lastError = e?.message || "Gemini service unavailable."; // error/timeout/abort → retry bila masih ada attempt
     }
   }
 
-  // Fallback deterministik — dashboard tidak pernah kosong.
-  const analysis = fallbackInstitutionalAnalysis(payload);
-  cache.set(key, { at: Date.now(), analysis });
-  return { analysis, telemetry: { responseTimeMs: Date.now() - start, cacheHit: false, retryCount: attempts - 1, fallbackUsed: true, source: "fallback" } };
+  // Phase 17.2 (Zero Mock): TIDAK ada fallback. AI tidak tersedia → lempar error.
+  // UI wajib menampilkan state "AI Analysis Unavailable" — tanpa narasi/fabrikasi.
+  throw new Error(lastError || "Gemini service unavailable.");
 }

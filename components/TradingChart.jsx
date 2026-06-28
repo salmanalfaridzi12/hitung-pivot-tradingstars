@@ -7,25 +7,25 @@ import {
   HistogramSeries,
   createSeriesMarkers,
 } from "lightweight-charts";
+import DataSourceBadge from "./DataSourceBadge";
 
-// Deterministic PRNG supaya candle sintetis stabil (tidak ganti-ganti tiap render)
-function makeRnd(seed) {
-  let s = seed % 2147483647;
-  if (s <= 0) s += 2147483646;
-  return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
-}
-
-export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText, orderBlocks = null, fvgs = null }) {
+export default function TradingChart({ ohlc, levels, pattern, stockCode = "", signalText, orderBlocks = null, fvgs = null, history = null }) {
   const containerRef = useRef(null);
 
   const o = parseFloat(ohlc?.open);
   const h = parseFloat(ohlc?.high);
   const l = parseFloat(ohlc?.low);
   const c = parseFloat(ohlc?.close);
-  const valid = ![o, h, l, c].some((v) => isNaN(v));
+
+  // Phase 17.2 (Zero Mock): HANYA histori OHLCV asli. Tidak ada candle sintetis.
+  // Bila histori tidak tersedia → empty state (lihat render di bawah).
+  const realBars = Array.isArray(history)
+    ? history.filter((b) => b && b.high > 0 && b.low > 0 && b.close > 0 && b.open > 0)
+    : [];
+  const hasHistory = realBars.length >= 1;
 
   useEffect(() => {
-    if (!containerRef.current || !valid) return;
+    if (!containerRef.current || !hasHistory) return;
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -55,52 +55,44 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
     });
     candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.28 } });
 
-    // --- Generate deret candle sintetis (harian) berakhir di OHLC asli ---
+    // --- Candle data: HANYA histori OHLCV ASLI (Zero Mock — tanpa sintesis) ---
     const N = 60;
+    // Range untuk lebar band OB (pakai OHLC saat ini; bila kosong, ambil dari bar asli terakhir).
+    const lastBar = realBars[realBars.length - 1];
+    const cc = !isNaN(c) ? c : lastBar.close;
+    const hh = !isNaN(h) ? h : lastBar.high;
+    const ll = !isNaN(l) ? l : lastBar.low;
     const range = levels
-      ? Math.max(levels.R3 - levels.S3, h - l, c * 0.05)
-      : Math.max((h - l) * 3, c * 0.05);
-    const rnd = makeRnd(Math.round(c) + Math.round(h) + N);
+      ? Math.max(levels.R3 - levels.S3, hh - ll, cc * 0.05)
+      : Math.max((hh - ll) * 3, cc * 0.05);
     const candles = [];
     const vols = [];
     const today = new Date();
-    let prevClose = c - range * 0.45; // mulai di bawah, drift naik ke harga sekarang
-    for (let i = N - 1; i >= 0; i--) {
+    // Histori OHLCV asli (tanggal disintesis berurutan — backend tak mengirim tanggal).
+    const series = realBars.slice(-N);
+    const n = series.length;
+    for (let i = 0; i < n; i++) {
+      const b = series[i];
       const d = new Date(today);
-      d.setDate(d.getDate() - i);
+      d.setDate(d.getDate() - (n - 1 - i));
       const time = { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
-      if (i === 0) {
-        candles.push({ time, open: o, high: h, low: l, close: c });
-        vols.push({
-          time,
-          value: parseFloat(ohlc?.volume) || range * 1000,
-          color: c >= o ? "rgba(0,255,102,0.5)" : "rgba(124,58,237,0.6)",
-        });
-      } else {
-        const step = range * 0.018;
-        const op = prevClose;
-        const cl = op + (rnd() - 0.42) * step * 2;
-        const hi = Math.max(op, cl) + rnd() * step;
-        const lo = Math.min(op, cl) - rnd() * step;
-        candles.push({ time, open: op, high: hi, low: lo, close: cl });
-        prevClose = cl;
-        vols.push({
-          time,
-          value: range * 700 * (0.4 + rnd()),
-          color: cl >= op ? "rgba(0,255,102,0.32)" : "rgba(124,58,237,0.38)",
-        });
-      }
+      const isLast = i === n - 1;
+      const O = isLast && !isNaN(o) ? o : b.open;
+      const H = isLast && !isNaN(h) ? Math.max(h, b.high) : b.high;
+      const L = isLast && !isNaN(l) ? Math.min(l, b.low) : b.low;
+      const C = isLast && !isNaN(c) ? c : b.close;
+      candles.push({ time, open: O, high: H, low: L, close: C });
+      vols.push({ time, value: b.volume || 0, color: C >= O ? "rgba(0,255,102,0.4)" : "rgba(124,58,237,0.45)" });
     }
     candle.setData(candles);
 
-    // --- Volume histogram (VPA) di bawah, dengan satu batang klimaks oranye ---
-    const volSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: "volume" },
-      priceScaleId: "volume",
-    });
+    // --- Volume histogram (VPA): tandai bar volume klimaks ASLI ---
+    const volSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "volume" });
     chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
-    const climaxIdx = Math.max(1, vols.length - 16);
-    vols[climaxIdx] = { ...vols[climaxIdx], value: vols[climaxIdx].value * 2.4, color: "#f97316" };
+    if (vols.length) {
+      const climaxIdx = vols.reduce((mi, v, idx) => (v.value > vols[mi].value ? idx : mi), 0);
+      vols[climaxIdx] = { ...vols[climaxIdx], color: "#f97316" };
+    }
     volSeries.setData(vols);
 
     // --- Garis pivot horizontal (putus-putus) ---
@@ -162,13 +154,16 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
         });
     }
 
-    // --- SMC markers: CHoCH + Bullish BOS + pola candle ---
+    // --- SMC markers: CHoCH + Bullish BOS + pola candle (indeks relatif jumlah candle nyata) ---
+    const M = candles.length;
     const markers = [];
-    markers.push({ time: candles[Math.floor(N * 0.4)].time, position: "aboveBar", color: "#f97316", shape: "arrowDown", text: "CHoCH" });
-    markers.push({ time: candles[Math.floor(N * 0.62)].time, position: "belowBar", color: "#00ff66", shape: "arrowUp", text: "Bullish BOS" });
-    if (pattern) {
+    if (M > 2) {
+      markers.push({ time: candles[Math.floor(M * 0.4)].time, position: "aboveBar", color: "#f97316", shape: "arrowDown", text: "CHoCH" });
+      markers.push({ time: candles[Math.floor(M * 0.62)].time, position: "belowBar", color: "#00ff66", shape: "arrowUp", text: "Bullish BOS" });
+    }
+    if (pattern && M > 0) {
       markers.push({
-        time: candles[N - 1].time,
+        time: candles[M - 1].time,
         position: pattern.type === "bullish" ? "belowBar" : "aboveBar",
         color: pattern.type === "bullish" ? "#00ff66" : "#f97316",
         shape: pattern.type === "bullish" ? "arrowUp" : "arrowDown",
@@ -188,33 +183,41 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
       chart.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o, h, l, c, JSON.stringify(levels), pattern?.name, orderBlocks?.blocks?.length, fvgs?.gaps?.length]);
-
-  if (!valid) return null;
+  }, [o, h, l, c, JSON.stringify(levels), pattern?.name, orderBlocks?.blocks?.length, fvgs?.gaps?.length, history?.length]);
 
   const fmt = (n) => Math.round(n).toLocaleString("id-ID");
 
   return (
     <div className="w-full bg-slate-950/50 rounded-2xl border border-white/5 overflow-hidden relative">
-      {/* Label Order Block (SMC) */}
-      {levels && (
-        <div className="absolute top-2 left-3 z-10 text-[10px] font-black text-purple-200 bg-purple-500/15 border border-purple-500/40 rounded-md px-2 py-1 backdrop-blur-sm shadow-lg">
-          Zona Order Block @ {fmt(levels.PP)}
+      {hasHistory ? (
+        <>
+          {/* Label Order Block (SMC) */}
+          {levels && (
+            <div className="absolute top-2 left-3 z-10 text-[10px] font-black text-purple-200 bg-purple-500/15 border border-purple-500/40 rounded-md px-2 py-1 backdrop-blur-sm shadow-lg">
+              Zona Order Block @ {fmt(levels.PP)}
+            </div>
+          )}
+          {/* Komentar sinyal di dalam grafik + volume klimaks */}
+          <div className="absolute top-2 right-3 z-10 flex flex-col items-end gap-1">
+            {signalText && (
+              <span className="text-[9px] font-bold text-slate-300 bg-slate-900/70 border border-white/10 rounded px-2 py-0.5 backdrop-blur-sm">
+                {signalText}
+              </span>
+            )}
+            <span className="text-[8px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded px-2 py-0.5">
+              Volume Klimaks (Distribusi)
+            </span>
+          </div>
+
+          <div ref={containerRef} className="w-full h-[340px]" />
+        </>
+      ) : (
+        /* Phase 17.2 (Zero Mock): histori tidak tersedia → empty state (TANPA candle sintetis). */
+        <div className="w-full h-[340px] flex flex-col items-center justify-center gap-1 text-center px-4">
+          <p className="text-sm font-bold text-slate-400">No historical market data available.</p>
+          <p className="text-[11px] text-slate-600">Histori OHLCV belum tersedia untuk emiten ini.</p>
         </div>
       )}
-      {/* Komentar sinyal di dalam grafik + volume klimaks */}
-      <div className="absolute top-2 right-3 z-10 flex flex-col items-end gap-1">
-        {signalText && (
-          <span className="text-[9px] font-bold text-slate-300 bg-slate-900/70 border border-white/10 rounded px-2 py-0.5 backdrop-blur-sm">
-            {signalText}
-          </span>
-        )}
-        <span className="text-[8px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded px-2 py-0.5">
-          Volume Klimaks (Distribusi)
-        </span>
-      </div>
-
-      <div ref={containerRef} className="w-full h-[340px]" />
 
       {/* Footer: mini toolbar gambar + label */}
       <div className="px-3 pb-2 pt-1 flex justify-between items-center text-[10px] text-slate-500 font-medium">
@@ -225,6 +228,7 @@ export default function TradingChart({ ohlc, levels, pattern, stockCode = "", si
             <span className="w-4 h-4 rounded bg-slate-800 border border-white/5 inline-flex items-center justify-center text-[9px]">▭</span>
           </span>
           TradingView Lightweight Charts
+          <DataSourceBadge source="OHLCV History" />
         </span>
         <span className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />

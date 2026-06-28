@@ -2,8 +2,13 @@
 
 import React from "react";
 import type { InstitutionalConfluence, ScoredFactor } from "../utils/institutionalConfluence";
+import DataSourceBadge from "./DataSourceBadge";
+import { requirePipelineProp } from "../utils/invariant";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI — hanya merender output
+// Institutional Confluence Engine yang diterima via props dari orchestrator (page.jsx).
 interface Props {
+  /** Output Confluence Engine dari pipeline (null = belum ada hasil). WAJIB di-supply. */
   result?: InstitutionalConfluence | null;
   loading?: boolean;
 }
@@ -55,12 +60,15 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="depth-3d bg-gradient-to-br from-indigo-900/20 to-purple-900/20 rounded-3xl border border-purple-500/25 p-5 transition-all hover:shadow-[0_0_22px_rgba(168,85,247,0.3)]">
     <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2 mb-4">
       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Institutional Confluence
+      <DataSourceBadge source="InstitutionalConfluence" />
     </h3>
     {children}
   </div>
 );
 
-export default function InstitutionalConfluencePanel({ result, loading }: Props): React.JSX.Element {
+export default function InstitutionalConfluencePanel({ result: resultProp, loading }: Props): React.JSX.Element {
+  const result = requirePipelineProp(resultProp, "result", "InstitutionalConfluencePanel"); // invariant: orchestrator wajib supply
+
   if (loading) {
     return (
       <Shell>
@@ -70,9 +78,6 @@ export default function InstitutionalConfluencePanel({ result, loading }: Props)
         </div>
       </Shell>
     );
-  }
-  if (result === undefined) {
-    return <Shell><p className="text-[11px] text-red-400/90 leading-relaxed" role="alert">Gagal menghitung confluence.</p></Shell>;
   }
   if (!result) {
     return <Shell><p className="text-[11px] text-slate-500 leading-relaxed">Jalankan analisa saham untuk menghitung Institutional Confluence.</p></Shell>;

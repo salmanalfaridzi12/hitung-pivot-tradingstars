@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { getInstitutionalAnalysis, clearAiCache } from "./institutionalValidator";
-import { InstitutionalAnalysisSchema, type ValidatorInput } from "./institutionalSchema";
+import { type ValidatorInput } from "./institutionalSchema";
 import { scoreConfluence, type FactorInput } from "../../utils/institutionalConfluence";
 
 const factors: FactorInput[] = [
@@ -31,20 +31,16 @@ describe("getInstitutionalAnalysis", () => {
     const r = await getInstitutionalAnalysis(makeInput());
     expect(r.telemetry.source).toBe("ai");
     expect(r.telemetry.retryCount).toBe(0);
-    expect(r.telemetry.fallbackUsed).toBe(false);
     expect(r.analysis.institutionalBias).toBe("Bullish");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("JSON malformed (gagal Zod) 2x → fallback, retryCount 1, fetch 2x", async () => {
+  // Phase 17.2 (Zero Mock): tidak ada fallback — kegagalan AI WAJIB melempar error.
+  it("JSON malformed (gagal Zod) 2x → throw (tanpa fallback), fetch 2x", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ foo: 1 }));
     vi.stubGlobal("fetch", fetchMock);
-    const r = await getInstitutionalAnalysis(makeInput());
-    expect(r.telemetry.source).toBe("fallback");
-    expect(r.telemetry.fallbackUsed).toBe(true);
-    expect(r.telemetry.retryCount).toBe(1);
+    await expect(getInstitutionalAnalysis(makeInput())).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(InstitutionalAnalysisSchema.safeParse(r.analysis).success).toBe(true);
   });
 
   it("malformed lalu valid → retry sukses (source 'ai', retryCount 1)", async () => {
@@ -57,17 +53,14 @@ describe("getInstitutionalAnalysis", () => {
     expect(r.telemetry.retryCount).toBe(1);
   });
 
-  it("route error (ok:false) → fallback", async () => {
+  it("route error (ok:false) → throw dengan pesan error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ ok: false, error: "boom" }) }));
-    const r = await getInstitutionalAnalysis(makeInput());
-    expect(r.telemetry.source).toBe("fallback");
+    await expect(getInstitutionalAnalysis(makeInput())).rejects.toThrow(/boom/);
   });
 
-  it("timeout/abort (fetch reject) → fallback, tidak crash", async () => {
+  it("timeout/abort (fetch reject) → throw, tidak fabrikasi", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("aborted")));
-    const r = await getInstitutionalAnalysis(makeInput());
-    expect(r.telemetry.source).toBe("fallback");
-    expect(InstitutionalAnalysisSchema.safeParse(r.analysis).success).toBe(true);
+    await expect(getInstitutionalAnalysis(makeInput())).rejects.toThrow();
   });
 
   it("cache: panggilan kedua (key sama) → source 'cache', fetch tidak dipanggil lagi", async () => {
@@ -81,11 +74,8 @@ describe("getInstitutionalAnalysis", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("fallback selalu menghasilkan schema valid", async () => {
+  it("AI tidak tersedia → throw (tanpa analysis fabricated)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("x")));
-    const r = await getInstitutionalAnalysis(makeInput("ADRO"));
-    const parsed = InstitutionalAnalysisSchema.safeParse(r.analysis);
-    expect(parsed.success).toBe(true);
-    expect(r.analysis.tradeManagement.invalidations.length).toBeGreaterThan(0);
+    await expect(getInstitutionalAnalysis(makeInput("ADRO"))).rejects.toThrow();
   });
 });

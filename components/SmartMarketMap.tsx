@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { buildMarketMap, type LiquidityZone } from "../utils/marketMap";
+import React from "react";
+import type { LiquidityZone, MarketMap } from "../utils/marketMap";
+import DataSourceBadge from "./DataSourceBadge";
+import { requirePipelineProp } from "../utils/invariant";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI — tidak menjalankan
+// Market Map Engine. Market Map diterima via props dari orchestrator (page.jsx).
 interface Props {
-  pivots: any;
+  /** Market Map dari pipeline (null = belum ada hasil). WAJIB di-supply orchestrator. */
+  map?: MarketMap | null;
+  /** Harga terkini untuk garis penanda (display-only). */
   currentPrice: number | string;
-  ma20?: number | string | null;
-  volume?: number | string | null;
-  ma20Volume?: number | string | null;
 }
 
 const PHASE_STYLE: Record<string, string> = {
@@ -40,16 +43,7 @@ function ZoneCard({ z }: { z: LiquidityZone }): React.JSX.Element {
 }
 
 export default function SmartMarketMap(props: Props): React.JSX.Element | null {
-  const map = useMemo(
-    () => buildMarketMap({
-      pivots: props.pivots,
-      currentPrice: Number(props.currentPrice),
-      ma20: props.ma20 != null && props.ma20 !== "" ? Number(props.ma20) : null,
-      volume: props.volume != null && props.volume !== "" ? Number(props.volume) : null,
-      ma20Volume: props.ma20Volume != null && props.ma20Volume !== "" ? Number(props.ma20Volume) : null,
-    }),
-    [props.pivots, props.currentPrice, props.ma20, props.volume, props.ma20Volume]
-  );
+  const map = requirePipelineProp(props.map, "map", "SmartMarketMap"); // invariant: orchestrator wajib supply
 
   if (!map) return null;
   const cp = Number(props.currentPrice);
@@ -61,6 +55,7 @@ export default function SmartMarketMap(props: Props): React.JSX.Element | null {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Smart Market Map
+          <DataSourceBadge source="Market Map" />
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider ${PHASE_STYLE[map.phase]}`}>{map.phase}</span>

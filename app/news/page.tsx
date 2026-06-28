@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Newspaper, Search, ArrowLeft } from "lucide-react";
 import {
-  MOCK_MARKET_SENTIMENT,
   SENTIMENT_BADGE,
   overallLabel,
   avgScore,
@@ -18,15 +17,17 @@ function scoreColor(score: number): string {
 }
 
 export default function NewsPage(): React.JSX.Element {
-  const [items, setItems] = useState<MarketSentiment[]>(MOCK_MARKET_SENTIMENT);
+  // Phase 17.2 (Zero Mock): mulai kosong; isi HANYA dari Route Handler (Supabase).
+  const [items, setItems] = useState<MarketSentiment[]>([]);
+  const [source, setSource] = useState<string>("loading"); // "loading" | "supabase" | "unavailable"
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     let alive = true;
     fetch("/api/market-sentiment")
       .then((r) => r.json())
-      .then((d) => { if (alive && Array.isArray(d?.data)) setItems(d.data); })
-      .catch(() => {/* fallback mock */});
+      .then((d) => { if (alive && Array.isArray(d?.data)) { setItems(d.data); setSource(d.source || "unavailable"); } })
+      .catch(() => { if (alive) setSource("unavailable"); });
     return () => { alive = false; };
   }, []);
 
@@ -102,7 +103,13 @@ export default function NewsPage(): React.JSX.Element {
 
         {/* Grid kartu sentimen */}
         {filtered.length === 0 ? (
-          <p className="text-center text-sm text-slate-500 py-12">Tidak ada sentimen untuk "{query}".</p>
+          <p className="text-center text-sm text-slate-500 py-12">
+            {query
+              ? `Tidak ada sentimen untuk "${query}".`
+              : source === "loading"
+                ? "Memuat sentimen pasar…"
+                : "No market sentiment data available."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((it) => (
@@ -132,7 +139,9 @@ export default function NewsPage(): React.JSX.Element {
         )}
 
         <p className="text-center text-[9px] text-slate-600 pt-2 pb-8">
-          Data sentimen demo (mock). Sambungkan Supabase di <span className="text-purple-400 font-bold">/api/market-sentiment</span> untuk data live.
+          {source === "supabase"
+            ? <>Sumber data: <span className="text-purple-400 font-bold">Supabase</span> (live).</>
+            : <>Sumber data: <span className="text-purple-400 font-bold">Supabase</span>. Isi tabel <span className="text-purple-400 font-bold">market_sentiment</span> untuk menampilkan sentimen live.</>}
         </p>
       </div>
     </div>

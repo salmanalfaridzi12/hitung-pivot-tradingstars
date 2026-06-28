@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { analyzeLiquidity, type LiquidityZone, type LiquidityResult } from "../utils/liquidityEngine";
-import type { OHLCV } from "../utils/vcp";
+import React from "react";
+import type { LiquidityZone, LiquidityResult } from "../utils/liquidityEngine";
+import DataSourceBadge from "./DataSourceBadge";
+import { requirePipelineProp } from "../utils/invariant";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI — tidak menjalankan
+// Liquidity Engine. Hasil diterima via props dari orchestrator (page.jsx).
 interface Props {
-  data?: OHLCV[] | null;
+  /** Output Liquidity Engine dari pipeline (null = belum/ tak cukup data). WAJIB di-supply. */
+  result?: LiquidityResult | null;
+  /** Harga terkini untuk garis penanda (display-only). */
+  currentPrice?: number;
   loading?: boolean;
 }
 
@@ -15,6 +21,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="depth-3d bg-black/40 backdrop-blur-md rounded-3xl border border-purple-500/20 p-5 transition-all hover:shadow-[0_0_18px_rgba(168,85,247,0.25)]">
     <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2 mb-4">
       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Institutional Liquidity
+      <DataSourceBadge source="Liquidity Engine" />
     </h3>
     {children}
   </div>
@@ -47,14 +54,11 @@ function ZoneRow({ z }: { z: LiquidityZone }): React.JSX.Element {
   );
 }
 
-export default function LiquidityMap({ data, loading }: Props): React.JSX.Element {
-  const result = useMemo<LiquidityResult | "error" | null>(() => {
-    if (!data || data.length < 12) return null;
-    try { return analyzeLiquidity(data); } catch { return "error"; }
-  }, [data]);
+export default function LiquidityMap({ result: resultProp, currentPrice, loading }: Props): React.JSX.Element {
+  const result = requirePipelineProp(resultProp, "result", "LiquidityMap"); // invariant: orchestrator wajib supply
 
   // Skeleton / loading
-  if (loading || !data) {
+  if (loading) {
     return (
       <Shell>
         <div className="space-y-2 animate-pulse" aria-busy="true" aria-label="Memuat likuiditas">
@@ -63,17 +67,13 @@ export default function LiquidityMap({ data, loading }: Props): React.JSX.Elemen
       </Shell>
     );
   }
-  // Error
-  if (result === "error") {
-    return <Shell><p className="text-[11px] text-red-400/90 leading-relaxed" role="alert">Gagal menghitung likuiditas. Coba analisa ulang.</p></Shell>;
-  }
   // Empty
   if (!result || result.zones.length === 0) {
     return <Shell><p className="text-[11px] text-slate-500 leading-relaxed">Belum ada area likuiditas signifikan pada data historis terakhir.</p></Shell>;
   }
 
   const { buySide, sellSide, recentSweep, range } = result;
-  const cp = data[data.length - 1].close;
+  const cp = currentPrice ?? range.lo;
   const yOf = (pr: number) => Math.min(100, Math.max(0, ((range.hi - pr) / Math.max(range.hi - range.lo, 1)) * 100));
 
   return (

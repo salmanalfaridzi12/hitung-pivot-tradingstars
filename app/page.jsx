@@ -19,6 +19,7 @@ import { analyzeFairValueGaps } from "../utils/fairValueGaps";
 import { buildMarketMap } from "../utils/marketMap";
 import { analyzeLiquidity } from "../utils/liquidityEngine";
 import { computeInstitutionalConfluence } from "../utils/institutionalConfluence";
+import { getInstitutionalAnalysis } from "../lib/ai/institutionalValidator";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
 const SmartMarketMap = dynamic(() => import("../components/SmartMarketMap"), { ssr: false });
@@ -395,6 +396,31 @@ export default function PivotAnalyzer() {
     } : null
   ), [confluenceData, stockCode, timeframe, marketMapData, liquidityData, orderBlocksData, fvgData]);
 
+  // Phase 19 — Orchestrator menjalankan Institutional Validator (SATU-SATUNYA tempat eksekusi).
+  // Komponen <InstitutionalAIAnalysis> hanya merender hasil + status ini.
+  const [instAi, setInstAi] = useState({ result: null, loading: false, error: null });
+  const instAiAbortRef = useRef(null);
+
+  const runInstitutionalAi = useCallback(async () => {
+    if (!aiValidatorInput) return;
+    instAiAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    instAiAbortRef.current = ctrl;
+    setInstAi({ result: null, loading: true, error: null });
+    try {
+      const r = await getInstitutionalAnalysis(aiValidatorInput, { signal: ctrl.signal });
+      setInstAi({ result: r, loading: false, error: null });
+    } catch (e) {
+      setInstAi({ result: null, loading: false, error: e?.message || "Gagal memuat analisa AI." });
+    }
+  }, [aiValidatorInput]);
+
+  // Reset analisa Validator saat ticker/timeframe berganti (cegah kebocoran lintas-ticker).
+  useEffect(() => {
+    instAiAbortRef.current?.abort();
+    setInstAi({ result: null, loading: false, error: null });
+  }, [stockCode, timeframe]);
+
   // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
   // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
   useEffect(() => {
@@ -409,7 +435,6 @@ export default function PivotAnalyzer() {
 
   // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
-    console.log(`DEBUG: Calculating pivot for H:${h}, L:${l}, C:${c}`);
     const p = (h + l + c) / 3;
     return {
       PP: Math.round(p),
@@ -597,7 +622,6 @@ export default function PivotAnalyzer() {
           throw new Error("Kalkulasi Pivot menghasilkan NaN. Pastikan input angka valid.");
         }
 
-        console.log('DEBUG: Levels calculated safely', levels);
         setResult(levels);
 
         const detectedPattern = identifyPattern({ open: o, high: h, low: l, close: c });
@@ -672,7 +696,6 @@ export default function PivotAnalyzer() {
       const tf = timeframe.toLowerCase();
       const apiBase = resolveApiBase(); // lokal: backend uvicorn; production: relative (abaikan localhost nyasar)
       const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
-      console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
         signal: controller.signal,
@@ -778,10 +801,8 @@ export default function PivotAnalyzer() {
       if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
         // Defensive filter: pastikan tidak ada bar null/0 yang lolos dari backend
         const cleanBars = sanitizeOHLCV(data.ohlcv_history);
-        console.log("Isi vcpData:", cleanBars.length, cleanBars);
         setVcpData(cleanBars);
       } else {
-        console.log("Isi vcpData: 0", data.ohlcv_history);
         setVcpData([]);
       }
 
@@ -817,7 +838,6 @@ export default function PivotAnalyzer() {
       const tf = timeframe.toLowerCase();
       const apiBase = resolveApiBase(); // lokal: backend uvicorn; production: relative (abaikan localhost nyasar)
       const fetchUrl = `${apiBase}/api/trading?symbol=${encodeURIComponent(code)}&timeframe=${tf}&history=true`;
-      console.log('Fetching from:', fetchUrl);
       const res = await fetch(fetchUrl, {
         cache: 'no-store',
         signal: controller.signal,
@@ -978,10 +998,8 @@ export default function PivotAnalyzer() {
       // -- VCP History: simpan data historis untuk VcpIndicator --
       if (Array.isArray(data.ohlcv_history) && data.ohlcv_history.length > 0) {
         const cleanBars = sanitizeOHLCV(data.ohlcv_history);
-        console.log("Isi vcpData:", cleanBars.length, cleanBars);
         setVcpData(cleanBars);
       } else {
-        console.log("Isi vcpData: 0", data.ohlcv_history);
         setVcpData([]);
       }
 
@@ -1087,8 +1105,8 @@ export default function PivotAnalyzer() {
               files: [file],
             });
             return;
-          } catch (e) {
-            console.log("Share canceled", e);
+          } catch {
+            /* user membatalkan share — abaikan */
           }
         }
         const link = document.createElement("a");
@@ -1968,7 +1986,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">Level acuan teknikal utama untuk konfirmasi entry/exit.</p>
                   </div>
 
-                  {/* NEWS & SENTIMENT ANALYZER (mock — sambungkan Supabase via /api/market-sentiment) */}
+                  {/* NEWS & SENTIMENT ANALYZER (sumber: Supabase via /api/market-sentiment; kosong → empty state) */}
                   <NewsSentimentAnalyzer ticker={stockCode} limit={3} />
                 </div>
 
@@ -1987,40 +2005,44 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   </div>
                 )}
 
-                {/* P16: Smart Market Map — dynamic liquidity zones + fase pasar (anchor matematis) */}
+                {/* P16: Smart Market Map — render-only; Market Map dari pipeline (page memo) */}
                 <ErrorBoundary>
-                  <SmartMarketMap
-                    pivots={result}
-                    currentPrice={currentPrice || close}
-                    ma20={ma20Price}
-                    volume={volume}
-                    ma20Volume={ma20Volume}
+                  <SmartMarketMap map={marketMapData} currentPrice={currentPrice || close} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 1: Institutional Liquidity — render-only (output pipeline) */}
+                <ErrorBoundary>
+                  <LiquidityMap
+                    result={liquidityData}
+                    currentPrice={Array.isArray(vcpData) && vcpData.length ? vcpData[vcpData.length - 1].close : (parseFloat(currentPrice) || parseFloat(close) || 0)}
+                    loading={!vcpData}
                   />
                 </ErrorBoundary>
 
-                {/* P17 · Module 1: Institutional Liquidity Engine */}
+                {/* P17 · Module 3: Institutional Order Block — render-only (output pipeline) */}
                 <ErrorBoundary>
-                  <LiquidityMap data={vcpData} loading={!vcpData} />
+                  <OrderBlockPanel result={orderBlocksData} loading={!vcpData} />
                 </ErrorBoundary>
 
-                {/* P17 · Module 3: Institutional Order Block Engine */}
+                {/* P17 · Module 4: Institutional Fair Value Gap — render-only (output pipeline) */}
                 <ErrorBoundary>
-                  <OrderBlockPanel data={vcpData} loading={!vcpData} />
+                  <FairValueGapPanel result={fvgData} loading={!vcpData} />
                 </ErrorBoundary>
 
-                {/* P17 · Module 4: Institutional Fair Value Gap Engine */}
-                <ErrorBoundary>
-                  <FairValueGapPanel data={vcpData} loading={!vcpData} precomputed={fvgData} />
-                </ErrorBoundary>
-
-                {/* P17 · Module 5: Institutional Confluence Engine (single source of truth) */}
+                {/* P17 · Module 5: Institutional Confluence — render-only (single source of truth) */}
                 <ErrorBoundary>
                   <InstitutionalConfluencePanel result={confluenceData} loading={!result} />
                 </ErrorBoundary>
 
-                {/* P17 · Module 2: AI Institutional Validator (Gemini explains the deterministic output) */}
+                {/* P17 · Module 2: AI Institutional Validator — render-only; orchestrator menjalankan Validator */}
                 <ErrorBoundary>
-                  <InstitutionalAIAnalysis input={aiValidatorInput} />
+                  <InstitutionalAIAnalysis
+                    input={aiValidatorInput}
+                    analysis={instAi.result}
+                    loading={instAi.loading}
+                    error={instAi.error}
+                    onGenerate={runInstitutionalAi}
+                  />
                 </ErrorBoundary>
 
                 <ErrorBoundary>
@@ -2031,6 +2053,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                     stockCode={stockCode}
                     orderBlocks={orderBlocksData}
                     fvgs={fvgData}
+                    history={vcpData}
                     signalText={(() => {
                       const cp = parseFloat(currentPrice || close);
                       if (!result || isNaN(cp)) return null;

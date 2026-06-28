@@ -3,13 +3,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  MOCK_MARKET_SENTIMENT,
   SENTIMENT_BADGE,
   overallLabel,
   avgScore,
-  filterByTicker,
   type MarketSentiment,
 } from "../lib/marketSentiment";
+import DataSourceBadge from "./DataSourceBadge";
 
 interface Props {
   /** Bila diisi, widget hanya menampilkan berita emiten ini. */
@@ -19,16 +18,18 @@ interface Props {
 }
 
 export default function NewsSentimentAnalyzer({ ticker, limit = 3 }: Props): React.JSX.Element {
-  // Render instan dgn mock (sudah difilter ticker); lalu sinkron dari Route Handler.
-  const [items, setItems] = useState<MarketSentiment[]>(() => filterByTicker(MOCK_MARKET_SENTIMENT, ticker));
+  // Phase 17.2 (Zero Mock): mulai kosong; isi HANYA dari Route Handler (Supabase).
+  const [items, setItems] = useState<MarketSentiment[]>([]);
+  const [source, setSource] = useState<string>("loading"); // "loading" | "supabase" | "unavailable"
 
   useEffect(() => {
     let alive = true;
+    setItems([]); setSource("loading"); // Phase 18: reset saat ticker berganti — cegah kebocoran lintas-ticker
     const qs = ticker ? `?ticker=${encodeURIComponent(ticker)}` : "";
     fetch(`/api/market-sentiment${qs}`)
       .then((r) => r.json())
-      .then((d) => { if (alive && Array.isArray(d?.data)) setItems(d.data); })
-      .catch(() => {/* tetap pakai mock */});
+      .then((d) => { if (alive && Array.isArray(d?.data)) { setItems(d.data); setSource(d.source || "unavailable"); } })
+      .catch(() => { if (alive) setSource("unavailable"); });
     return () => { alive = false; };
   }, [ticker]);
 
@@ -42,6 +43,7 @@ export default function NewsSentimentAnalyzer({ ticker, limit = 3 }: Props): Rea
         <h3 className="text-sm font-black text-slate-200 uppercase tracking-widest flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" />
           News &amp; Sentiment{ticker ? <span className="text-purple-400 normal-case tracking-normal">· {ticker}</span> : null}
+          <DataSourceBadge source={source === "supabase" ? "Supabase" : "Unavailable"} />
         </h3>
         <span className={`px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider ${SENTIMENT_BADGE[label]}`}>
           {label}
@@ -66,7 +68,7 @@ export default function NewsSentimentAnalyzer({ ticker, limit = 3 }: Props): Rea
       <div className="flex flex-col gap-2 flex-1">
         {shown.length === 0 ? (
           <p className="text-[11px] text-slate-500 leading-relaxed py-2">
-            Belum ada sentimen untuk {ticker || "pasar"}. Lihat seluruh sentimen pasar di bawah.
+            {source === "loading" ? "Memuat sentimen pasar…" : "No market sentiment data available."}
           </p>
         ) : (
           shown.map((it) => (

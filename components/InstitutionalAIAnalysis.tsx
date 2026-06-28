@@ -1,17 +1,29 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { getInstitutionalAnalysis, type ValidatorResult } from "../lib/ai/institutionalValidator";
+import React, { useEffect, useState } from "react";
+import type { ValidatorResult } from "../lib/ai/institutionalValidator";
 import type { ValidatorInput, InstitutionalAnalysis } from "../lib/ai/institutionalSchema";
+import DataSourceBadge from "./DataSourceBadge";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI.
+// Tidak menjalankan Institutional Validator. Eksekusi ada di orchestrator (page.jsx);
+// hasil + status diterima via props, aksi didelegasikan lewat onGenerate.
 interface Props {
+  /** Output pipeline (aiValidatorInput) — penanda apakah analisa bisa di-generate. */
   input?: ValidatorInput | null;
+  /** Hasil Validator yang dijalankan orchestrator (page.jsx). */
+  analysis?: ValidatorResult | null;
+  loading?: boolean;
+  error?: string | null;
+  /** Minta orchestrator menjalankan Validator (komponen tidak mengeksekusi engine). */
+  onGenerate: () => void;
 }
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="depth-3d bg-gradient-to-br from-indigo-900/20 to-purple-900/20 rounded-3xl border border-purple-500/25 p-5 transition-all hover:shadow-[0_0_22px_rgba(168,85,247,0.3)]">
     <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2 mb-4">
       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Institutional AI Analysis
+      <DataSourceBadge source="InstitutionalValidator" />
     </h3>
     {children}
   </div>
@@ -45,33 +57,13 @@ function Chips({ title, items, tone }: { title: string; items: string[]; tone: "
 const sourceBadge: Record<string, string> = {
   ai: "text-green-300 border-green-400/50 bg-green-500/10 shadow-[0_0_10px_rgba(34,197,94,0.4)]",
   cache: "text-blue-300 border-blue-400/40 bg-blue-500/10",
-  fallback: "text-amber-300 border-amber-400/40 bg-amber-500/10",
 };
 
-export default function InstitutionalAIAnalysis({ input }: Props): React.JSX.Element {
-  const [result, setResult] = useState<ValidatorResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function InstitutionalAIAnalysis({ input, analysis, loading = false, error = null, onGenerate }: Props): React.JSX.Element {
   const [typed, setTyped] = useState("");
-  const abortRef = useRef<AbortController | null>(null);
+  const result = analysis ?? null;
 
-  async function run() {
-    if (!input) return;
-    abortRef.current?.abort();
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    setLoading(true); setError(null); setResult(null); setTyped("");
-    try {
-      const r = await getInstitutionalAnalysis(input, { signal: ctrl.signal });
-      setResult(r);
-    } catch (e: any) {
-      setError(e?.message || "Gagal memuat analisa AI.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Animasi "streaming": ketik executiveSummary bertahap.
+  // Animasi "streaming": ketik executiveSummary bertahap (display-only).
   useEffect(() => {
     const full = result?.analysis.executiveSummary ?? "";
     if (!full) { setTyped(""); return; }
@@ -80,8 +72,6 @@ export default function InstitutionalAIAnalysis({ input }: Props): React.JSX.Ele
     const id = setInterval(() => { i += 3; setTyped(full.slice(0, i)); if (i >= full.length) clearInterval(id); }, 16);
     return () => clearInterval(id);
   }, [result]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
 
   if (!input) {
     return <Shell><p className="text-[11px] text-slate-500 leading-relaxed">Jalankan analisa saham dulu agar Institutional Confluence tersedia.</p></Shell>;
@@ -97,12 +87,27 @@ export default function InstitutionalAIAnalysis({ input }: Props): React.JSX.Ele
     );
   }
 
+  // Phase 17.2 (Zero Mock): AI gagal → state eksplisit "AI Analysis Unavailable".
+  // Tidak ada narasi/fallback yang dirender.
+  if (error) {
+    return (
+      <Shell>
+        <div className="space-y-2">
+          <p className="text-[12px] font-black uppercase tracking-widest text-amber-300" role="alert">AI Analysis Unavailable</p>
+          <p className="text-[11px] text-slate-400 leading-relaxed">Reason: {error}</p>
+          <button onClick={onGenerate} className="mt-1 px-4 py-2 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-300 text-[11px] font-black uppercase tracking-widest hover:bg-purple-500/20 transition-all">
+            Coba Lagi →
+          </button>
+        </div>
+      </Shell>
+    );
+  }
+
   if (!result) {
     return (
       <Shell>
         <p className="text-[11px] text-slate-400 leading-relaxed mb-3">Hasilkan interpretasi institusional (Gemini menjelaskan output Confluence Engine — tidak menghitung apa pun).</p>
-        {error && <p className="text-[10px] text-red-400/90 mb-2" role="alert">{error}</p>}
-        <button onClick={run} className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-purple-500/20 hover:brightness-110 transition-all">
+        <button onClick={onGenerate} className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-widest shadow-lg shadow-purple-500/20 hover:brightness-110 transition-all">
           Generate Institutional Analysis →
         </button>
       </Shell>
@@ -119,9 +124,9 @@ export default function InstitutionalAIAnalysis({ input }: Props): React.JSX.Ele
         <span className="text-[11px] font-black text-white">{a.institutionalBias}</span>
         <div className="flex items-center gap-2">
           <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${sourceBadge[result.telemetry.source]}`}>
-            {result.telemetry.source === "fallback" ? "Fallback" : result.telemetry.source === "cache" ? "Cached" : "AI"}
+            {result.telemetry.source === "cache" ? "Cached" : "AI"}
           </span>
-          <button onClick={run} className="text-[9px] font-black text-purple-300 hover:text-purple-200 uppercase tracking-wider">↻ Ulangi</button>
+          <button onClick={onGenerate} className="text-[9px] font-black text-purple-300 hover:text-purple-200 uppercase tracking-wider">↻ Ulangi</button>
         </div>
       </div>
 
@@ -167,7 +172,7 @@ export default function InstitutionalAIAnalysis({ input }: Props): React.JSX.Ele
 
         {isDev && (
           <p className="text-[8px] text-slate-600 font-mono pt-2 border-t border-white/5">
-            dev · {result.telemetry.responseTimeMs}ms · source={result.telemetry.source} · retries={result.telemetry.retryCount} · cache={String(result.telemetry.cacheHit)} · fallback={String(result.telemetry.fallbackUsed)}
+            dev · {result.telemetry.responseTimeMs}ms · source={result.telemetry.source} · retries={result.telemetry.retryCount} · cache={String(result.telemetry.cacheHit)}
           </p>
         )}
       </div>

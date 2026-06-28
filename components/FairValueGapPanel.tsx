@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { analyzeFairValueGaps, type FairValueGap, type FVGResult, type FVGStatus, type FVGPriority } from "../utils/fairValueGaps";
-import type { OHLCV } from "../utils/vcp";
-import type { MarketPhase } from "../utils/marketMap";
+import React from "react";
+import type { FairValueGap, FVGResult, FVGStatus, FVGPriority } from "../utils/fairValueGaps";
+import DataSourceBadge from "./DataSourceBadge";
+import { requirePipelineProp } from "../utils/invariant";
 
+// Phase 19 (Architecture Lockdown): KOMPONEN PRESENTASI MURNI — tidak menjalankan
+// Fair Value Gap Engine. Hasil diterima via props dari orchestrator (page.jsx).
 interface Props {
-  data?: OHLCV[] | null;
+  /** Output FVG Engine dari pipeline (null = belum/ tak cukup data). WAJIB di-supply. */
+  result?: FVGResult | null;
   loading?: boolean;
-  phase?: MarketPhase | null;
-  /** Hasil FVG yang sudah dihitung di parent (hindari kalkulasi ganda). */
-  precomputed?: FVGResult | null;
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("id-ID");
@@ -31,6 +31,7 @@ const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="depth-3d bg-black/40 backdrop-blur-md rounded-3xl border border-purple-500/20 p-5 transition-all hover:shadow-[0_0_18px_rgba(168,85,247,0.25)]">
     <h3 className="text-sm font-black text-purple-300 uppercase tracking-widest flex items-center gap-2 mb-4">
       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc]" /> Fair Value Gaps
+      <DataSourceBadge source="FVG Engine" />
     </h3>
     {children}
   </div>
@@ -76,14 +77,10 @@ function GapCard({ g, nearest }: { g: FairValueGap; nearest: boolean }): React.J
   );
 }
 
-export default function FairValueGapPanel({ data, loading, phase, precomputed }: Props): React.JSX.Element {
-  const result = useMemo<FVGResult | "error" | null>(() => {
-    if (precomputed) return precomputed;
-    if (!data || data.length < 5) return null;
-    try { return analyzeFairValueGaps(data, { phase: phase ?? null }); } catch { return "error"; }
-  }, [data, phase, precomputed]);
+export default function FairValueGapPanel({ result: resultProp, loading }: Props): React.JSX.Element {
+  const result = requirePipelineProp(resultProp, "result", "FairValueGapPanel"); // invariant: orchestrator wajib supply
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <Shell>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-pulse" aria-busy="true" aria-label="Memuat fair value gaps">
@@ -91,9 +88,6 @@ export default function FairValueGapPanel({ data, loading, phase, precomputed }:
         </div>
       </Shell>
     );
-  }
-  if (result === "error") {
-    return <Shell><p className="text-[11px] text-red-400/90 leading-relaxed" role="alert">Gagal menghitung Fair Value Gap. Coba analisa ulang.</p></Shell>;
   }
   if (!result || (result.bullish.length === 0 && result.bearish.length === 0)) {
     return <Shell><p className="text-[11px] text-slate-500 leading-relaxed">Belum ada Fair Value Gap signifikan pada data historis terakhir.</p></Shell>;
