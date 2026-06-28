@@ -26,6 +26,7 @@ const LiquidityMap = dynamic(() => import("../components/LiquidityMap"), { ssr: 
 const OrderBlockPanel = dynamic(() => import("../components/OrderBlockPanel"), { ssr: false });
 const FairValueGapPanel = dynamic(() => import("../components/FairValueGapPanel"), { ssr: false });
 const InstitutionalConfluencePanel = dynamic(() => import("../components/InstitutionalConfluencePanel"), { ssr: false });
+const InstitutionalAIAnalysis = dynamic(() => import("../components/InstitutionalAIAnalysis"), { ssr: false });
 const VcpIndicator = dynamic(() => import("../components/VcpIndicator"), { 
   ssr: false,
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
@@ -379,6 +380,19 @@ export default function PivotAnalyzer() {
       history: vcpData, liquidity: liquidityData, orderBlocks: orderBlocksData, fvg: fvgData, marketMap: marketMapData,
     });
   }, [result, currentPrice, close, ma20Price, volume, ma20Volume, vcpData, liquidityData, orderBlocksData, fvgData, marketMapData]);
+
+  // P17 · Module 2: input untuk AI Validator (reuse semua hasil engine; no recompute).
+  const aiValidatorInput = useMemo(() => (
+    confluenceData ? {
+      ticker: stockCode || "—",
+      timeframe: timeframe || "daily",
+      confluence: confluenceData,
+      marketMap: marketMapData,
+      liquidity: liquidityData,
+      orderBlocks: orderBlocksData,
+      fvg: fvgData,
+    } : null
+  ), [confluenceData, stockCode, timeframe, marketMapData, liquidityData, orderBlocksData, fvgData]);
 
   // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
   // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
@@ -2001,6 +2015,11 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                 {/* P17 · Module 5: Institutional Confluence Engine (single source of truth) */}
                 <ErrorBoundary>
                   <InstitutionalConfluencePanel result={confluenceData} loading={!result} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 2: AI Institutional Validator (Gemini explains the deterministic output) */}
+                <ErrorBoundary>
+                  <InstitutionalAIAnalysis input={aiValidatorInput} />
                 </ErrorBoundary>
 
                 <ErrorBoundary>
