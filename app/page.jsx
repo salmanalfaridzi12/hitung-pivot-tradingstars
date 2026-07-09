@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Target, Shield, AlertCircle,
   Share2, Save, Bell, LineChart, Table, History, Image as ImageIcon,
   ChevronRight, ArrowRight, Activity, Zap, Info, Search, Trash2, Calendar,
-  Loader2, CheckCircle2, XCircle, WifiOff, Star, Calculator, Newspaper
+  Loader2, CheckCircle2, XCircle, WifiOff, Star, Calculator, Newspaper, Scale
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import dynamic from "next/dynamic";
@@ -19,6 +19,9 @@ import { analyzeFairValueGaps } from "../utils/fairValueGaps";
 import { buildMarketMap } from "../utils/marketMap";
 import { analyzeLiquidity } from "../utils/liquidityEngine";
 import { computeInstitutionalConfluence } from "../utils/institutionalConfluence";
+import { formatDualTradePlan } from "../utils/tradePlanFormatter";
+import { composeAiCopy } from "../utils/aiCopywriting";
+import { humanizeReason, humanizeSource, decisionView, scenarioView, sentimentView, qualityView, aiConclusion, simpleComparisonRows } from "../utils/uiCopy";
 import { getInstitutionalAnalysis } from "../lib/ai/institutionalValidator";
 const TradingChart = dynamic(() => import("../components/TradingChart"), { ssr: false });
 const NewsSentimentAnalyzer = dynamic(() => import("../components/NewsSentimentAnalyzer"), { ssr: false });
@@ -38,6 +41,10 @@ const TrendConfluence = dynamic(() => import("../components/TrendConfluence"), {
   loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
 });
 import StoryExportCard from "../components/StoryExportCard";
+const RightIssueCalculator = dynamic(() => import("../components/RightIssueCalculator"), {
+  ssr: false,
+  loading: () => <div className="animate-pulse bg-purple-900/20 rounded-lg h-24 w-full border border-purple-500/10"></div>
+});
 
 // --- Helper Utilities --------------------------------------------------------
 const fmt = (n) => (n != null ? n.toLocaleString("id-ID") : "-");
@@ -217,14 +224,7 @@ export default function PivotAnalyzer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
-  // -- Lebar zona entry (% dari rentang pivot R1–S1), bisa diatur user
-  const [zonePct, setZonePct] = useState(6);
 
-  // -- Kalkulator posisi (modal & risiko per trade)
-  const [capital, setCapital] = useState("");
-  const [riskPct, setRiskPct] = useState(2);
-  const [calcEntry, setCalcEntry] = useState(""); // Harga Entry — default Entry Agresif (AI)
-  const [calcSL, setCalcSL] = useState("");        // Harga SL — default SL (AI) / S1
 
   // -- AI (Gemini) analysis state
   const [aiLoading, setAiLoading] = useState(false);
@@ -304,17 +304,7 @@ export default function PivotAnalyzer() {
     return Math.abs(reward / risk).toFixed(2);
   }, [result, currentPrice, close]);
 
-  // --- Derived: Entry Zone — berbasis pivot (rentang R1–S1) & bisa diatur user ---
-  const entryZone = useMemo(() => {
-    if (!result) return null;
-    const anchor = parseFloat(currentPrice) || parseFloat(close);
-    if (isNaN(anchor) || anchor <= 0) return null;
-    const pct = Math.max(1, Math.min(25, parseFloat(zonePct) || 6));
-    const pivotRange = result.R1 - result.S1;
-    // setengah-lebar zona = persen × rentang pivot (fallback ke 2% harga bila perlu)
-    const half = (pivotRange > 0 ? pivotRange : anchor * 0.02) * (pct / 100);
-    return { low: Math.round(anchor - half), high: Math.round(anchor + half) };
-  }, [result, currentPrice, close, zonePct]);
+
 
   // --- Derived: Validitas setup AI (sinkron sentimen ↔ Entry/TP/SL) ----------
   // Tujuan: cegah info kontradiktif — kalau AI bearish / wait & see / tak ada
@@ -383,6 +373,29 @@ export default function PivotAnalyzer() {
     });
   }, [result, currentPrice, close, ma20Price, volume, ma20Volume, vcpData, liquidityData, orderBlocksData, fvgData, marketMapData]);
 
+  // P20.1 · Institutional Trade Plan — PRESENTATION LAYER. Formatter HANYA
+  // menyusun ulang output engine deterministik yang sudah ada menjadi data
+  // siap-UI (no engine, no kalkulasi pasar; satu-satunya aritmetika = RR).
+  // P20.7 — Dual Trade Plan (Aggressive & Conservative) dari struktur deterministik yang SAMA.
+  const tradePlanDual = useMemo(() => {
+    const cp = parseFloat(currentPrice) || parseFloat(close);
+    if (!result || !Number.isFinite(cp) || cp <= 0) return null;
+    const aiEntry = Number(aiData?.entry?.agresif?.level);
+    return formatDualTradePlan({
+      currentPrice: cp,
+      pivots: result,
+      aiSelectedEntry: Number.isFinite(aiEntry) && aiEntry > 0 ? aiEntry : null,
+      orderBlocks: orderBlocksData,
+      fvg: fvgData,
+      liquidity: liquidityData,
+      marketMap: marketMapData,
+      confluence: confluenceData,
+    });
+  }, [result, currentPrice, close, aiData, orderBlocksData, fvgData, liquidityData, marketMapData, confluenceData]);
+
+  // Skenario terekomendasi → dipakai konsumer single-plan (AI-chip fallback N/A).
+  const tradePlanData = tradePlanDual ? tradePlanDual[tradePlanDual.recommended] : null;
+
   // P17 · Module 2: input untuk AI Validator (reuse semua hasil engine; no recompute).
   const aiValidatorInput = useMemo(() => (
     confluenceData ? {
@@ -400,6 +413,20 @@ export default function PivotAnalyzer() {
   // Komponen <InstitutionalAIAnalysis> hanya merender hasil + status ini.
   const [instAi, setInstAi] = useState({ result: null, loading: false, error: null });
   const instAiAbortRef = useRef(null);
+
+  // P23.2 — Mode tampilan (presentation-only): beginner menyembunyikan istilah
+  // teknikal, pro menampilkan label asli engine. Kalkulasi TIDAK berubah.
+  const [viewMode, setViewMode] = useState("beginner");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("pivot_view_mode");
+      if (v === "beginner" || v === "trader" || v === "pro") setViewMode(v);
+    } catch { /* localStorage ditolak — pakai default */ }
+  }, []);
+  const changeViewMode = (v) => {
+    setViewMode(v);
+    try { localStorage.setItem("pivot_view_mode", v); } catch { /* abaikan */ }
+  };
 
   const runInstitutionalAi = useCallback(async () => {
     if (!aiValidatorInput) return;
@@ -421,17 +448,7 @@ export default function PivotAnalyzer() {
     setInstAi({ result: null, loading: false, error: null });
   }, [stockCode, timeframe]);
 
-  // Smart Calculator: isi otomatis Harga Entry (=Entry Agresif AI) & SL (=SL AI/S1)
-  // saat ada analisa/pivot baru. Tetap bisa di-override manual oleh user.
-  useEffect(() => {
-    const agr = Number(aiSetup.agrLevel);
-    const aiSl = Number(aiData?.sl?.level);
-    const defEntry = Number.isFinite(agr) && agr > 0 ? agr : (parseFloat(currentPrice) || parseFloat(close));
-    const defSL = Number.isFinite(aiSl) && aiSl > 0 ? aiSl : (result ? result.S1 : NaN);
-    if (Number.isFinite(defEntry) && defEntry > 0) setCalcEntry(String(Math.round(defEntry)));
-    if (Number.isFinite(defSL) && defSL > 0) setCalcSL(String(Math.round(defSL)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData, result]);
+
 
   // --- Pivot Calculation ----------------------------------------------------
   const calculatePivot = (h, l, c) => {
@@ -502,35 +519,27 @@ export default function PivotAnalyzer() {
     }
   };
 
-  // Susun teks analisa untuk Salin / Bagikan (schema nested, fallback ke lama)
+  // Susun teks analisa untuk Salin / Bagikan — copywriting gaya mentor
+  // (utils/aiCopywriting). Data tetap dari aiData apa adanya; hanya wording.
   const buildAiText = () => {
     const d = aiData;
     if (!d) return "";
-    const crisis = aiSetup.collapse;
-    const narrative = d.analysis_text ?? d.analysis;
-    const agr = d.entry?.agresif, dem = d.entry?.demand;
-    const conf = d.confluence_score != null ? ` · Confluence ${d.confluence_score}/100${d.confidence ? ` (${d.confidence})` : ""}` : "";
-    const lines = [
-      `📊 Analisa AI — ${stockCode || "Saham"} (${timeframe})`,
-      `Sentiment: ${d.sentiment}${conf}`,
-      d.headline ? `\n${d.headline}` : "",
-      narrative ? `\n${narrative}` : "",
-    ];
-    if (crisis) {
-      lines.push(`\n⚠️ WAIT & SEE: Momentum belum valid. Jangan paksakan entry beli.`);
-      const zp = d.zona_pantau;
-      if (zp && Number.isFinite(Number(zp.bottom)) && Number.isFinite(Number(zp.top))) {
-        lines.push(`🎯 Zona Pantau: ${fmtLevel(zp.bottom)} – ${fmtLevel(zp.top)}${zp.desc ? ` (${zp.desc})` : ""}`);
-      }
-    } else {
-      if (agr?.level != null) lines.push(`\n⚡ Entry Agresif: ${fmtLevel(agr.level)}${agr.desc ? ` (${agr.desc})` : ""}`);
-      if (dem?.level != null) lines.push(`🛡️ Area Demand: ${fmtLevel(dem.level)}${dem.desc ? ` (${dem.desc})` : ""}`);
-      if (d.tp?.level != null) lines.push(`🎯 TP: ${fmtLevel(d.tp.level)}${d.tp.reason ? ` — ${d.tp.reason}` : ""}`);
-      if (d.sl?.level != null) lines.push(`🛑 SL: ${fmtLevel(d.sl.level)}${d.sl.reason ? ` — ${d.sl.reason}` : ""}`);
-    }
-    if (d.risk) lines.push(`\nRisiko: ${d.risk}`);
-    if (d.disclaimer) lines.push(`\n${d.disclaimer}`);
-    return lines.filter(Boolean).join("\n");
+    return composeAiCopy({
+      symbol: stockCode,
+      timeframe,
+      sentiment: d.sentiment,
+      confluenceScore: d.confluence_score,
+      headline: d.headline,
+      narrative: d.analysis_text ?? d.analysis,
+      entryAggressive: d.entry?.agresif,
+      entryDemand: d.entry?.demand,
+      tp: d.tp,
+      sl: d.sl,
+      zonaPantau: d.zona_pantau,
+      risk: d.risk,
+      rrr: calcRRR,
+      crisis: aiSetup.collapse,
+    });
   };
 
   const copyAi = async () => {
@@ -1352,6 +1361,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
             { id: "giants",    label: "SAHAM SAHAM KONGLO", icon: null, href: null },
             { id: "watchlist", label: "Watchlist", icon: Shield,    href: null },
             { id: "average",   label: "Average",   icon: Calculator, href: null },
+            { id: "rightissue", label: "Right Issue", icon: Scale,    href: null },
             { id: "history",   label: "History",   icon: History,    href: null },
           ].map((t) => {
             const base = "flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-[9px] sm:text-[11px] font-bold transition-all duration-300";
@@ -1598,6 +1608,18 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                       <Zap className="w-4 h-4 text-purple-400" /> Analisa AI
                     </h3>
                     <div className="flex items-center gap-2">
+                      {/* P23.2 — Mode tampilan (presentasi saja, engine tak berubah) */}
+                      <div className="flex items-center rounded-lg border border-white/10 bg-slate-900 p-0.5" title="Mode tampilan: Pemula menyederhanakan istilah, Pro menampilkan label teknikal asli">
+                        {[["beginner", "🌱 Pemula"], ["trader", "📊 Trader"], ["pro", "🔬 Pro"]].map(([v, l]) => (
+                          <button
+                            key={v}
+                            onClick={() => changeViewMode(v)}
+                            className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === v ? 'bg-purple-500/30 text-purple-200' : 'text-slate-500 hover:text-slate-300'}`}
+                          >
+                            {l}
+                          </button>
+                        ))}
+                      </div>
                       <button
                         onClick={() => setAutoAi((v) => !v)}
                         title="Auto-analisa setiap kali Hitung Pivot"
@@ -1646,13 +1668,49 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   {/* Hasil */}
                   {!aiLoading && aiData && (
                     <div className="space-y-3">
+                      {/* 🤖 KESIMPULAN AI — kartu utama (hierarki: kesimpulan → plan → detail).
+                          Presentation-only: bias/level/keyakinan diambil dari engine yang sudah ada. */}
+                      {(() => {
+                        const plan = tradePlanData;
+                        const c = aiConclusion({
+                          mode: tradePlanDual?.mode ?? (aiSetup.collapse ? "WAIT" : "BUY"),
+                          decision: plan?.decision?.state,
+                          confidence: plan?.confidence ?? (aiData.confluence_score != null ? Number(aiData.confluence_score) : null),
+                          entry: plan?.valid ? plan.entry.price : null,
+                          stopLoss: plan?.valid ? plan.stopLoss.price : null,
+                          target: plan?.valid && plan.targets[0] ? plan.targets[0].price : null,
+                          watchLow: tradePlanDual?.longOnly?.watchZone?.low ?? null,
+                          watchHigh: tradePlanDual?.longOnly?.watchZone?.high ?? null,
+                        });
+                        const tone = c.bias === "BUY"
+                          ? "border-green-500/40 bg-green-500/10 shadow-[0_0_18px_rgba(34,197,94,0.12)]"
+                          : c.bias === "WAIT"
+                          ? "border-amber-500/40 bg-amber-500/10 shadow-[0_0_18px_rgba(245,158,11,0.10)]"
+                          : "border-red-500/40 bg-red-500/10";
+                        const chip = c.bias === "BUY"
+                          ? "text-green-300 border-green-400/50 bg-green-500/15"
+                          : c.bias === "WAIT"
+                          ? "text-amber-300 border-amber-400/50 bg-amber-500/15"
+                          : "text-red-300 border-red-400/50 bg-red-500/15";
+                        return (
+                          <div className={`rounded-2xl border p-4 space-y-2 ${tone}`} data-bias={c.bias}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-200">🤖 Kesimpulan AI</span>
+                              <span className={`px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest ${chip}`}>{c.emoji} {c.label}</span>
+                            </div>
+                            <p className="text-[12px] font-bold text-white leading-relaxed">{c.why}</p>
+                            <p className="text-[11px] text-slate-200/90 leading-relaxed">👉 {c.action}</p>
+                          </div>
+                        );
+                      })()}
+
                       {/* Sentiment + headline */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest ${
                           aiData.sentiment === 'BULLISH' ? 'bg-green-500/15 text-green-400 border border-green-500/30'
                           : aiData.sentiment === 'BEARISH' ? 'bg-red-500/15 text-red-400 border border-red-500/30'
                           : 'bg-slate-500/15 text-slate-300 border border-white/10'
-                        }`}>{aiData.sentiment || 'NETRAL'}</span>
+                        }`}>{viewMode === "pro" ? (aiData.sentiment || 'NETRAL') : sentimentView(aiData.sentiment).label}</span>
                         <span className="text-[11px] font-black text-white flex-1 min-w-[140px]">{aiData.headline}</span>
                       </div>
 
@@ -1669,10 +1727,10 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                         return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Confluence Score</span>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{viewMode === "pro" ? "Confluence Score" : "Tingkat Keyakinan AI"}</span>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-black text-white tabular-nums">{score}<span className="text-[10px] text-slate-500">/100</span></span>
-                                <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${badgeCls}`}>{label}</span>
+                                <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${badgeCls}`}>{viewMode === "pro" ? label : ({ "Very Strong": "Sangat Kuat", Strong: "Kuat", Neutral: "Netral", Weak: "Lemah", "Very Weak": "Sangat Lemah" })[label] ?? label}</span>
                               </div>
                             </div>
                             <div className="relative">
@@ -1723,7 +1781,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                                       <span className="text-[9px] font-black uppercase tracking-widest text-amber-300">🎯 Zona Pantau</span>
                                       <span className="text-sm font-black text-amber-200 tabular-nums">{fmtLevel(bottom)} – {fmtLevel(top)}</span>
                                     </div>
-                                    {zp?.desc && <p className="text-[10px] text-amber-200/80 leading-snug text-center">{zp.desc}</p>}
+                                    {zp?.desc && <p className="text-[10px] text-amber-200/80 leading-snug text-center">{viewMode === "pro" ? zp.desc : humanizeReason(zp.desc)}</p>}
                                   </div>
                                 );
                               })()}
@@ -1731,14 +1789,14 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                           ) : (
                             <div className="space-y-1.5">
                               <div className="text-[10px] leading-snug">
-                                <span className="text-yellow-300 font-black">⚡ Agresif:</span>{' '}
+                                <span className="text-yellow-300 font-black">{viewMode === "beginner" ? "⚡ Beli Langsung:" : "⚡ Agresif:"}</span>{' '}
                                 <span className="font-black text-white">{fmtLevel(aiSetup.agrLevel)}</span>
-                                {aiData.entry?.agresif?.desc && <span className="text-slate-400"> ({aiData.entry.agresif.desc})</span>}
+                                {aiData.entry?.agresif?.desc && <span className="text-slate-400"> ({viewMode === "pro" ? aiData.entry.agresif.desc : humanizeReason(aiData.entry.agresif.desc)})</span>}
                               </div>
                               <div className="text-[10px] leading-snug">
-                                <span className="text-emerald-300 font-black">🛡️ Area Demand:</span>{' '}
+                                <span className="text-emerald-300 font-black">{viewMode === "beginner" ? "🛡️ Beli saat Turun:" : "🛡️ Area Demand:"}</span>{' '}
                                 <span className="font-black text-white">{fmtLevel(aiSetup.demLevel)}</span>
-                                {aiData.entry?.demand?.desc && <span className="text-slate-400"> ({aiData.entry.demand.desc})</span>}
+                                {aiData.entry?.demand?.desc && <span className="text-slate-400"> ({viewMode === "pro" ? aiData.entry.demand.desc : humanizeReason(aiData.entry.demand.desc)})</span>}
                               </div>
                             </div>
                           )}
@@ -1746,19 +1804,240 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                         {/* TP & SL — level + reason (text-xs muted); disembunyikan saat crisis */}
                         {!aiSetup.collapse && (
                           <>
-                            <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
-                              <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP</div>
-                              <div className="text-[12px] font-black text-green-300 break-words">{fmtLevel(aiData.tp?.level)}</div>
-                              {aiData.tp?.reason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{aiData.tp.reason}</div>}
-                            </div>
-                            <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
-                              <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL</div>
-                              <div className="text-[12px] font-black text-red-300 break-words">{fmtLevel(aiData.sl?.level)}</div>
-                              {aiData.sl?.reason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{aiData.sl.reason}</div>}
-                            </div>
+                            {/* P20.1: bila level AI "N/A" tetapi struktur deterministik ada, isi dari Trade Plan Formatter (no N/A). */}
+                            {(() => {
+                              const tpFallback = aiSetup.tpNA && tradePlanData?.valid;
+                              const slFallback = aiSetup.slNA && tradePlanData?.valid;
+                              const tpVal = tpFallback ? tradePlanData.targets[0].price : aiData.tp?.level;
+                              const tpReason = tpFallback ? tradePlanData.targets[0].reasons.join(" · ") : aiData.tp?.reason;
+                              const slVal = slFallback ? tradePlanData.stopLoss.price : aiData.sl?.level;
+                              const slReason = slFallback ? tradePlanData.stopLoss.reasons.join(" · ") : aiData.sl?.reason;
+                              return (
+                                <>
+                                  <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+                                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5"><Target className="w-3 h-3" /> TP{tpFallback && <span className="text-cyan-400/80 normal-case tracking-normal">(engine)</span>}</div>
+                                    <div className="text-[12px] font-black text-green-300 break-words">{fmtLevel(tpVal)}</div>
+                                    {tpReason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{viewMode === "pro" ? tpReason : humanizeReason(tpReason)}</div>}
+                                  </div>
+                                  <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5"><AlertCircle className="w-3 h-3" /> SL{slFallback && <span className="text-cyan-400/80 normal-case tracking-normal">(engine)</span>}</div>
+                                    <div className="text-[12px] font-black text-red-300 break-words">{fmtLevel(slVal)}</div>
+                                    {slReason && <div className="text-[9px] text-slate-400/70 mt-0.5 leading-snug">{viewMode === "pro" ? slReason : humanizeReason(slReason)}</div>}
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </>
                         )}
                       </div>
+
+                      {/* â•â• INSTITUTIONAL DUAL TRADE PLAN (PRESENTATION · P20.7) â•â•â•â•â• */}
+                      {/* Aggressive & Conservative dari struktur deterministik yang SAMA. */}
+                      {/* Engine dikonsumsi sekali; hanya policy seleksi yang berbeda. */}
+                      {tradePlanDual && (() => {
+                        const dirLong = tradePlanDual.direction === "bullish";
+                        const badgeCls = (b) =>
+                          b === "Excellent" ? "text-green-300 border-green-400/40 bg-green-500/10"
+                          : b === "Good" ? "text-yellow-300 border-yellow-400/40 bg-yellow-500/10"
+                          : "text-orange-300 border-orange-400/40 bg-orange-500/10";
+                        const Reasons = ({ items, tone }) => (
+                          <div className={`text-[8px] leading-snug mt-1 ${tone}`}>
+                            {items.map((r, i) => <div key={i}>· {r}</div>)}
+                          </div>
+                        );
+                        const decClsOf = (s) =>
+                          s === "READY" ? "text-green-300 border-green-400/50 bg-green-500/15 shadow-[0_0_10px_rgba(34,197,94,0.35)]"
+                          : s === "WAIT" ? "text-yellow-300 border-yellow-400/50 bg-yellow-500/15"
+                          : "text-red-300 border-red-400/50 bg-red-500/15";
+                        const decToneOf = (s) =>
+                          s === "READY" ? "text-green-200/80" : s === "WAIT" ? "text-yellow-200/80" : "text-red-200/80";
+
+                        // Satu kartu skenario (dipakai Aggressive & Conservative — tanpa logika ganda).
+                        // P22.1 — recommended: gold border + badge + subtle glow; skor/why/timing dari formatter.
+                        // P23.2 — sadar viewMode: pro = label engine asli; beginner/trader =
+                        // rename + terjemahan bullet (data & angka tetap sama persis).
+                        const Scenario = ({ plan, icon, title, recommended, tie }) => {
+                          const dec = plan.decision;
+                          const decCls = decClsOf(dec.state);
+                          const gold = recommended && !tie;
+                          const pro = viewMode === "pro";
+                          const beginner = viewMode === "beginner";
+                          const sv = scenarioView(plan.style);
+                          const tr = (x) => (pro ? x : humanizeReason(x));
+                          return (
+                            <div
+                              className={`rounded-xl border p-2.5 space-y-2 ${gold ? "border-amber-400/60 bg-amber-500/5 shadow-[0_0_14px_rgba(251,191,36,0.18)]" : "border-white/10 bg-slate-900/30"}`}
+                              data-strategy={plan.style} data-decision={dec.state} data-score={plan.strategyScore}
+                            >
+                              {gold && (
+                                <div className="space-y-1">
+                                  <div className="text-[8px] font-black uppercase tracking-widest text-amber-300">{pro ? `⭐ Recommended · Score ${plan.strategyScore}` : "⭐ Pilihan AI — paling pas untuk kondisi sekarang"}</div>
+                                  {plan.why?.length > 0 && (
+                                    <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2 py-1">
+                                      {plan.why.map((w, i) => <div key={i} className="text-[9px] font-bold leading-snug text-amber-200/90">{tr(w)}</div>)}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {tie && recommended && (
+                                <div className="text-[8px] font-black uppercase tracking-widest text-slate-400">⚖ Kedua strategi sama-sama valid</div>
+                              )}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-200">{pro ? `${icon} ${title}` : sv.title}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${gold ? "text-amber-300 border-amber-400/50 bg-amber-500/10" : plan.style === "aggressive" ? "text-orange-300 border-orange-400/40 bg-orange-500/10" : "text-sky-300 border-sky-400/40 bg-sky-500/10"}`}>{pro ? plan.badge : sv.badge}</span>
+                                  <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-widest ${decCls}`}>{pro ? dec.state : decisionView(dec.state).label}</span>
+                                  <span className="px-2 py-0.5 rounded-full border border-cyan-400/40 bg-cyan-500/10 text-cyan-200 text-[8px] font-black uppercase tracking-wider">{pro ? `Conf ${plan.confidence}%` : `Yakin ${plan.confidence}%`}</span>
+                                  {!beginner && <span className="px-2 py-0.5 rounded-full border border-white/10 bg-slate-500/10 text-slate-300 text-[8px] font-black uppercase tracking-wider tabular-nums">{pro ? `Score ${plan.strategyScore}` : `Skor ${plan.strategyScore}`}</span>}
+                                </div>
+                              </div>
+                              <div className={`rounded-lg border px-2 py-1 ${decCls.replace(/shadow-\[[^\]]*\]/, "")}`}>
+                                {dec.reasons.map((r, i) => <div key={i} className={`text-[9px] font-bold leading-snug ${decToneOf(dec.state)}`}>{tr(r)}</div>)}
+                              </div>
+                              {plan.timingHint && (
+                                <div className="text-[9px] text-slate-400 leading-snug">⏱ {tr(plan.timingHint)}</div>
+                              )}
+                              {plan.valid && (<>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                    <div className="text-[8px] font-black uppercase tracking-widest text-purple-300 mb-0.5">{beginner ? "📍 Area Beli" : "Entry"}</div>
+                                    <div className="text-[12px] font-black text-white tabular-nums">{fmtLevel(plan.entry.price)}</div>
+                                    {!beginner && <div className="text-[8px] font-black uppercase tracking-widest text-purple-400/70 mt-1">{pro ? "Reason" : "Alasan"} <span className="text-purple-300/50 normal-case tracking-normal">· {pro ? plan.entry.source : humanizeSource(plan.entry.source)}</span></div>}
+                                    <Reasons items={pro ? plan.entry.reasons : plan.entry.reasons.map(humanizeReason)} tone="text-purple-200/70" />
+                                  </div>
+                                  <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                                    <div className="text-[8px] font-black uppercase tracking-widest text-red-300 mb-0.5">{beginner ? "🛑 Batas Rugi" : "Stop Loss"}</div>
+                                    <div className="text-[12px] font-black text-red-300 tabular-nums">{fmtLevel(plan.stopLoss.price)}</div>
+                                    {!beginner && <div className="text-[8px] font-black uppercase tracking-widest text-red-400/70 mt-1">{pro ? "Protection" : "Proteksi"} <span className="text-red-300/50 normal-case tracking-normal">· {pro ? plan.stopLoss.source : humanizeSource(plan.stopLoss.source)}</span></div>}
+                                    <Reasons items={pro ? plan.stopLoss.reasons : plan.stopLoss.reasons.map(humanizeReason)} tone="text-red-200/70" />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {plan.targets.map((t, i) => (
+                                    <div key={i} className="p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
+                                      <div className="text-[8px] font-black uppercase tracking-widest text-green-300 mb-0.5">{beginner ? `🎯 Target ${i + 1}` : `TP${i + 1}`}</div>
+                                      <div className="text-[11px] font-black text-green-300 tabular-nums">{fmtLevel(t.price)}</div>
+                                      <div className={`inline-block mt-1 px-1.5 py-0.5 rounded-md border text-[8px] font-black ${badgeCls(t.badge)}`}>{pro ? `RR ${t.rr.toFixed(1)} · ${t.badge}` : `Untung ${t.rr.toFixed(1)}× risiko`}</div>
+                                      {!beginner && <div className="text-[8px] font-black uppercase tracking-wider text-emerald-300/80 mt-1">{pro ? `Quality: ${t.quality}` : `Kualitas: ${qualityView(t.quality)}`}</div>}
+                                      <div className="text-[8px] text-slate-400/70 leading-snug mt-0.5">{(pro ? t.reasons : t.reasons.map(humanizeReason)).join(" · ")}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>)}
+                            </div>
+                          );
+                        };
+
+                        // P22.1 — Trade Comparison (bandingkan kedua strategi sekilas).
+                        const agg = tradePlanDual.aggressive, cons = tradePlanDual.conservative;
+                        const cmpRows = [
+                          ["Entry", fmtLevel(agg.entry.price), fmtLevel(cons.entry.price)],
+                          ["SL", fmtLevel(agg.stopLoss.price), fmtLevel(cons.stopLoss.price)],
+                          ["TP1", agg.targets[0] ? fmtLevel(agg.targets[0].price) : "—", cons.targets[0] ? fmtLevel(cons.targets[0].price) : "—"],
+                          ["RR", agg.targets[0] ? agg.targets[0].rr.toFixed(1) : "—", cons.targets[0] ? cons.targets[0].rr.toFixed(1) : "—"],
+                          ["Confidence", `${agg.confidence}%`, `${cons.confidence}%`],
+                          ["Decision", agg.decision.state, cons.decision.state],
+                          ["Score", String(agg.strategyScore), String(cons.strategyScore)],
+                          ["Recommended", tradePlanDual.tie ? "⚖" : tradePlanDual.recommended === "aggressive" ? "⭐" : "—", tradePlanDual.tie ? "⚖" : tradePlanDual.recommended === "conservative" ? "⭐" : "—"],
+                        ];
+                        // P22.2 — LONG-ONLY (IDX): tidak pernah render plan SHORT.
+                        const mode = tradePlanDual.mode;
+                        const isBuy = mode === "BUY";
+                        const g = tradePlanDual.longOnly;
+                        const modeCls = isBuy
+                          ? "text-green-300 border-green-400/40 bg-green-500/10"
+                          : mode === "WAIT" ? "text-yellow-300 border-yellow-400/50 bg-yellow-500/15" : "text-red-300 border-red-400/50 bg-red-500/15";
+                        return (
+                          <div className="rounded-2xl border border-cyan-500/25 bg-cyan-500/5 p-3 space-y-3" data-source="TradePlanFormatter" data-mode={mode}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-cyan-300 flex items-center gap-1.5">
+                                <Target className="w-3 h-3" /> {viewMode === "pro" ? "Institutional Trade Plan" : "📋 Rencana Trading AI"}
+                                <span className="text-[7px] text-slate-500 normal-case tracking-normal font-bold">{viewMode === "pro" ? "Long-Only · IDX" : "Khusus Beli · IDX"}</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${modeCls}`}>
+                                {viewMode === "pro" ? (isBuy ? "BUY" : mode) : isBuy ? "🟢 BELI" : mode === "WAIT" ? "🟡 TUNGGU" : "🔴 LEWATI"}
+                              </span>
+                            </div>
+
+                            {isBuy ? (<>
+                            {/* Trade Comparison — di atas kedua plan.
+                                Pro: tabel teknikal penuh; Pemula/Trader: 4 fokus
+                                (Strategi · Cocok Untuk · Peluang · Risiko) dari data yang sama. */}
+                            <div className="rounded-xl border border-white/10 bg-slate-900/30 p-2.5">
+                              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{viewMode === "pro" ? "Trade Comparison" : "Perbandingan Strategi"}</p>
+                              {viewMode === "pro" ? (
+                                <div className="grid grid-cols-3 gap-x-2 gap-y-0.5">
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-500"> </span>
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-orange-300 text-right">⚡ Aggressive</span>
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-sky-300 text-right">🛡 Conservative</span>
+                                  {cmpRows.map(([label, a, c], i) => (
+                                    <React.Fragment key={i}>
+                                      <span className="text-[9px] font-bold text-slate-500">{label}</span>
+                                      <span className="text-[9px] font-black text-slate-200 text-right tabular-nums">{a}</span>
+                                      <span className="text-[9px] font-black text-slate-200 text-right tabular-nums">{c}</span>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-3 gap-x-2 gap-y-1">
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-500">Strategi</span>
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-orange-300 text-right">🔥 Masuk Sekarang</span>
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-sky-300 text-right">🛡️ Tunggu Konfirmasi</span>
+                                  {simpleComparisonRows(
+                                    { rr: agg.targets[0]?.rr ?? null, decision: agg.decision.state },
+                                    { rr: cons.targets[0]?.rr ?? null, decision: cons.decision.state },
+                                    tradePlanDual.recommended,
+                                    tradePlanDual.tie
+                                  ).map(([label, a, c], i) => (
+                                    <React.Fragment key={i}>
+                                      <span className="text-[9px] font-bold text-slate-500">{label}</span>
+                                      <span className="text-[9px] font-bold text-slate-200 text-right leading-snug">{a}</span>
+                                      <span className="text-[9px] font-bold text-slate-200 text-right leading-snug">{c}</span>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              )}
+                              {tradePlanDual.tie && <p className="text-[9px] font-bold text-slate-400 mt-1.5">⚖ Kedua strategi sama-sama valid.</p>}
+                            </div>
+
+                            <Scenario plan={agg} icon="⚡" title="Aggressive" recommended={tradePlanDual.recommended === "aggressive"} tie={tradePlanDual.tie} />
+                            <Scenario plan={cons} icon="🛡" title="Conservative" recommended={tradePlanDual.recommended === "conservative"} tie={tradePlanDual.tie} />
+                            </>) : (
+                            /* Panduan LONG-ONLY: kenapa tidak ada BUY + zona pantau/akumulasi + trigger */
+                            <div className="rounded-xl border border-white/10 bg-slate-900/30 p-2.5 space-y-2" data-longonly="true">
+                              <div className={`rounded-lg border px-2 py-1.5 ${modeCls.replace(/shadow-\[[^\]]*\]/, "")}`}>
+                                <p className="text-[8px] font-black uppercase tracking-widest mb-0.5">{mode === "WAIT" ? (viewMode === "pro" ? "⏳ Tidak Ada Setup BUY — Pantau" : "⏳ Belum Saatnya Beli — Pantau Dulu") : (viewMode === "pro" ? "⛔ Tidak Ada Setup BUY" : "⛔ Jangan Beli Dulu")}</p>
+                                {(g?.reasons ?? []).map((r, i) => <div key={i} className="text-[9px] font-bold leading-snug opacity-90">{viewMode === "pro" ? r : humanizeReason(r)}</div>)}
+                              </div>
+                              {(g?.watchZone || g?.accumulationZone) && (
+                                <div className="grid grid-cols-2 gap-2">
+                                  {g?.watchZone && (
+                                    <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/25">
+                                      <div className="text-[8px] font-black uppercase tracking-widest text-amber-300 mb-0.5">🎯 Zona Pantau</div>
+                                      <div className="text-[11px] font-black text-amber-200 tabular-nums">{g.watchZone.low === g.watchZone.high ? fmtLevel(g.watchZone.low) : `${fmtLevel(g.watchZone.low)} – ${fmtLevel(g.watchZone.high)}`}</div>
+                                      <div className="text-[8px] text-amber-200/60 leading-snug mt-0.5">{viewMode === "pro" ? g.watchZone.source : humanizeSource(g.watchZone.source)}</div>
+                                    </div>
+                                  )}
+                                  {g?.accumulationZone && (
+                                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25">
+                                      <div className="text-[8px] font-black uppercase tracking-widest text-emerald-300 mb-0.5">📦 Zona Akumulasi</div>
+                                      <div className="text-[11px] font-black text-emerald-200 tabular-nums">{fmtLevel(g.accumulationZone.low)} – {fmtLevel(g.accumulationZone.high)}</div>
+                                      <div className="text-[8px] text-emerald-200/60 leading-snug mt-0.5">{viewMode === "pro" ? g.accumulationZone.source : humanizeSource(g.accumulationZone.source)}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {(g?.buyTriggers?.length ?? 0) > 0 && (
+                                <div>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-0.5">{viewMode === "pro" ? "✅ Trigger BUY" : "✅ Kapan Boleh Beli"}</p>
+                                  {g.buyTriggers.map((t, i) => <div key={i} className="text-[9px] text-slate-300 leading-snug">· {viewMode === "pro" ? t : humanizeReason(t)}</div>)}
+                                </div>
+                              )}
+                            </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {aiData.keyLevels && <p className="text-[11px] text-slate-400"><span className="text-purple-400 font-bold">Level: </span>{aiData.keyLevels}</p>}
                       {aiData.risk && <p className="text-[11px] text-amber-400/90"><span className="font-bold">Risiko: </span>{aiData.risk}</p>}
@@ -1787,6 +2066,19 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
 
 
                 {/* â•â• TREND CONTEXT + RRR SUMMARY ROW â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                {/* P23 - DETAIL ANALYSIS: teknikal lanjutan dalam SATU accordion (default collapsed).
+                    Komponen HANYA dipindah (reuse), tanpa logika/desain baru. Retail cukup melihat
+                    AI Analysis + Trade Plan di atas; advanced user tap untuk membuka detail. */}
+                <details className="group depth-3d bg-slate-900/40 rounded-3xl border border-white/5 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]">
+                  <summary className="cursor-pointer select-none list-none p-5 flex items-center justify-between [&::-webkit-details-marker]:hidden">
+                    <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                      <Table className="w-4 h-4 text-purple-500" /> Detail Analysis
+                      <span className="text-[8px] text-slate-500 normal-case tracking-normal font-bold hidden sm:inline">Market Map · Order Blocks · FVG · Confluence · Checklist</span>
+                    </h3>
+                    <span className="text-purple-400 text-xs font-black transition-transform group-open:rotate-180">▼</span>
+                  </summary>
+                  <div className="px-5 pb-5 space-y-6">
+
                 <div className="grid grid-cols-2 gap-3">
 
                   {/* Trend Context Card */}
@@ -1861,102 +2153,137 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   })()}
                 </div>
 
-                {/* Kontrol lebar zona entry (berbasis rentang pivot, bisa diatur) */}
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lebar Zona Entry</span>
-                  <input
-                    type="number"
-                    value={zonePct}
-                    onChange={(e) => setZonePct(e.target.value)}
-                    min="1" max="25" step="0.5"
-                    className="w-16 bg-slate-950 border border-purple-500/30 rounded-lg px-2 py-1.5 text-sm font-black text-purple-300 text-center focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  />
-                  <span className="text-[10px] text-slate-500 font-bold">% rentang pivot (R1–S1)</span>
-                  <div className="flex gap-1">
-                    {[{ l: "Sempit", v: 3 }, { l: "Sedang", v: 6 }, { l: "Lebar", v: 12 }].map((p) => (
-                      <button
-                        key={p.v}
-                        onClick={() => setZonePct(p.v)}
-                        className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${Number(zonePct) === p.v ? "bg-purple-500/20 border-purple-500/40 text-purple-300" : "bg-slate-900 border-white/10 text-slate-500 hover:text-purple-300"}`}
-                      >
-                        {p.l}
-                      </button>
-                    ))}
+                {/* EXECUTION CHECKLIST PANEL (P22.2) */}
+                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]">
+                  <div className="flex justify-between items-start mb-6">
+                    <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-purple-500" /> {viewMode === "pro" ? "Execution Checklist" : "Checklist Sebelum Beli"}
+                    </h3>
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${tradePlanData?.decision?.state === 'READY' ? 'bg-green-500/20 text-green-400 border-green-500/30' : tradePlanData?.decision?.state === 'WAIT' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
+                      {viewMode === "pro"
+                        ? (tradePlanData?.decision?.state === 'READY' ? '🟢 READY' : tradePlanData?.decision?.state === 'WAIT' ? '🟡 WAIT' : tradePlanData?.decision?.state === 'SKIP' ? '🔴 SKIP' : '—')
+                        : decisionView(tradePlanData?.decision?.state).label}
+                    </div>
                   </div>
-                  {entryZone && (
-                    <span className="text-[10px] text-slate-400 font-mono ml-auto">≈ Rp {entryZone.low.toLocaleString("id-ID")} – {entryZone.high.toLocaleString("id-ID")}</span>
+
+                  {tradePlanData ? (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {(() => {
+                           const isTrendAligned = tradePlanData.decision.reasons.some(r => /Trend/i.test(r) && !/Lawan/i.test(r) && !/Opposes/i.test(r));
+                           const hasConfluence = tradePlanData.confidence >= 65;
+                           const isEntryValid = tradePlanData.valid && tradePlanData.entry.source !== "Current Price";
+                           const isSLValid = tradePlanData.stopLoss != null;
+                           const hasTarget = tradePlanData.targets && tradePlanData.targets.length > 0;
+                           const maxRR = hasTarget ? Math.max(...tradePlanData.targets.map(t => t.rr)) : 0;
+                           const isRRGood = maxRR >= 1.5;
+                           const hasLiquidity = (tradePlanData.targets && tradePlanData.targets.some(t => t.source === "Liquidity")) || tradePlanData.stopLoss?.source === "Liquidity" || tradePlanData.entry.source === "Liquidity";
+                           const isFresh = tradePlanData.entry.reasons.some(r => /Fresh/i.test(r)) || tradePlanData.decision.reasons.some(r => /Fresh/i.test(r));
+
+                           const Item = ({ label, checked }) => (
+                             <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-950/50 border border-white/5">
+                               {checked ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />}
+                               <span className={`text-[10px] font-bold truncate ${checked ? 'text-slate-300' : 'text-slate-500'}`}>{label}</span>
+                             </div>
+                           );
+
+                           // P23.2 — label per mode tampilan (cek & data tidak berubah).
+                           const L = viewMode === "pro"
+                             ? ["Trend Align", "Inst. Confluence", "Entry Valid", "Stop Loss Valid", "Target Available", "RR > Minimum", "Liq. Confirm", "Structure Fresh"]
+                             : ["Searah Tren Besar", "Sinyal Saling Dukung", "Area Beli Valid", "Batas Rugi Valid", "Ada Target Jual", "Untung > Rugi", "Area Ramai Mendukung", "Struktur Masih Segar"];
+                           return (
+                             <>
+                               <Item label={L[0]} checked={isTrendAligned} />
+                               <Item label={L[1]} checked={hasConfluence} />
+                               <Item label={L[2]} checked={isEntryValid} />
+                               <Item label={L[3]} checked={isSLValid} />
+                               <Item label={L[4]} checked={hasTarget} />
+                               <Item label={L[5]} checked={isRRGood} />
+                               <Item label={L[6]} checked={hasLiquidity} />
+                               <Item label={L[7]} checked={isFresh} />
+                             </>
+                           );
+                        })()}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 rounded-xl bg-slate-950 border border-white/10">
+                          <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-2">{viewMode === "pro" ? "Execution Quality" : "Kualitas Setup"}</div>
+                          <div className="text-xl font-black text-purple-400 mb-2">
+                             {(() => {
+                               const q = tradePlanData.decision.state === "READY" && tradePlanData.confidence >= 80 ? "Excellent" :
+                                 tradePlanData.decision.state === "READY" ? "Good" :
+                                 tradePlanData.decision.state === "WAIT" ? "Average" : "Poor";
+                               return viewMode === "pro" ? q : ({ Excellent: "Sangat Baik", Good: "Baik", Average: "Cukup", Poor: "Kurang" })[q];
+                             })()}
+                          </div>
+                          <div className="space-y-1">
+                            {tradePlanData.decision.reasons.map((r, i) => (
+                              <div key={i} className="text-[11px] text-slate-400 font-medium flex gap-2">
+                                <span>{r.startsWith('✔') || r.startsWith('•') || r.startsWith('⚠️') ? '' : '•'}</span>
+                                <span>{r}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                          <div className="text-[9px] text-red-400 font-black uppercase tracking-widest mb-2 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Risk Warning
+                          </div>
+                          <div className="space-y-1.5">
+                             {!tradePlanData.valid && <div className="text-[11px] text-red-300 font-medium">• Trade Plan Tidak Valid (SL/TP gagal)</div>}
+                             {tradePlanData.decision.state === "SKIP" && <div className="text-[11px] text-red-300 font-medium">• Rekomendasi SKIP: Kondisi tidak memungkinkan.</div>}
+                             {tradePlanData.confidence < 50 && <div className="text-[11px] text-red-300 font-medium">• Weak Confluence ({tradePlanData.confidenceLabel})</div>}
+                             {tradePlanData.targets && tradePlanData.targets.length > 0 && Math.max(...tradePlanData.targets.map(t => t.rr)) < 1 && <div className="text-[11px] text-red-300 font-medium">• Poor Risk/Reward Ratio</div>}
+                             {tradePlanData.decision.reasons.filter(r => r.includes('⚠️')).map((r, i) => (
+                               <div key={`warn-${i}`} className="text-[11px] text-red-300 font-medium">{r}</div>
+                             ))}
+                             {tradePlanData.valid && tradePlanData.decision.state !== "SKIP" && tradePlanData.confidence >= 50 && tradePlanData.targets && tradePlanData.targets.some(t => t.rr >= 1) && !tradePlanData.decision.reasons.some(r => r.includes('⚠️')) && (
+                               <div className="text-[11px] text-slate-400 italic">Tidak ada anomali risiko major terdeteksi.</div>
+                             )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center py-6">
+                      <p className="text-[11px] text-slate-500">Belum ada Trading Plan yang dihasilkan.</p>
+                    </div>
                   )}
                 </div>
 
-                {/* Smart Calculator — reaktif (live), formula lot standar IDX */}
-                <div className="depth-3d bg-slate-900/40 rounded-3xl border border-white/5 p-5 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]">
-                  <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-4">
-                    <Calculator className="w-4 h-4 text-purple-500" /> Kalkulator Posisi
-                    <span className="text-[8px] text-purple-400/70 normal-case tracking-normal font-bold">· live</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Modal (Rp)</label>
-                      <input type="number" value={capital} onChange={(e) => setCapital(e.target.value)} placeholder="cth: 10000000"
-                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-white placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Risiko / Trade (%)</label>
-                      <input type="number" value={riskPct} onChange={(e) => setRiskPct(e.target.value)} min="0.1" max="100" step="0.5"
-                        className="w-full mt-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm font-black text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-black text-purple-300/80 uppercase tracking-widest">Harga Entry <span className="text-slate-600 normal-case">(agresif)</span></label>
-                      <input type="number" value={calcEntry} onChange={(e) => setCalcEntry(e.target.value)} placeholder="auto dari AI"
-                        className="w-full mt-1 bg-slate-950 border border-purple-500/20 rounded-xl px-3 py-2 text-sm font-black text-purple-200 placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-purple-500" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-black text-red-300/80 uppercase tracking-widest">Harga SL</label>
-                      <input type="number" value={calcSL} onChange={(e) => setCalcSL(e.target.value)} placeholder="auto dari AI"
-                        className="w-full mt-1 bg-slate-950 border border-red-500/20 rounded-xl px-3 py-2 text-sm font-black text-red-300 placeholder:text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500" />
-                    </div>
+                {/* P16: Smart Market Map — render-only (dipindah ke Detail · P23) */}
+                <ErrorBoundary>
+                  <SmartMarketMap map={marketMapData} currentPrice={currentPrice || close} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 1: Institutional Liquidity — render-only (dipindah ke Detail · P23) */}
+                <ErrorBoundary>
+                  <LiquidityMap
+                    result={liquidityData}
+                    currentPrice={Array.isArray(vcpData) && vcpData.length ? vcpData[vcpData.length - 1].close : (parseFloat(currentPrice) || parseFloat(close) || 0)}
+                    loading={!vcpData}
+                  />
+                </ErrorBoundary>
+
+                {/* P17 · Module 3: Institutional Order Block — render-only (dipindah ke Detail · P23) */}
+                <ErrorBoundary>
+                  <OrderBlockPanel result={orderBlocksData} loading={!vcpData} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 4: Institutional Fair Value Gap — render-only (dipindah ke Detail · P23) */}
+                <ErrorBoundary>
+                  <FairValueGapPanel result={fvgData} loading={!vcpData} />
+                </ErrorBoundary>
+
+                {/* P17 · Module 5: Institutional Confluence — render-only (dipindah ke Detail · P23) */}
+                <ErrorBoundary>
+                  <InstitutionalConfluencePanel result={confluenceData} loading={!result} />
+                </ErrorBoundary>
+
                   </div>
-                  {(() => {
-                    const fmt = (n) => Math.round(n).toLocaleString("id-ID");
-                    const modal = parseFloat(capital);
-                    const rPct = Math.max(0.1, Math.min(100, parseFloat(riskPct) || 2));
-                    const entry = parseFloat(calcEntry);
-                    const sl = parseFloat(calcSL);
-                    if (!(modal > 0))
-                      return <p className="text-[11px] text-slate-500 leading-relaxed">Isi <b className="text-slate-300">Modal</b> untuk menghitung posisi. Entry &amp; SL terisi otomatis dari analisa AI.</p>;
-                    if (!(Number.isFinite(entry) && Number.isFinite(sl)))
-                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Lengkapi Harga Entry &amp; SL (jalankan Analisa AI atau isi manual).</p>;
-                    const jarakSL = Math.abs(entry - sl);
-                    if (!(jarakSL > 0))
-                      return <p className="text-[11px] text-amber-400/90 leading-relaxed">⚠️ Jarak Entry↔SL = 0. Beda-kan harga Entry dan SL.</p>;
-                    const nominalRisiko = modal * (rPct / 100);
-                    const lot = Math.floor(nominalRisiko / (jarakSL * 100));
-                    const shares = lot * 100;
-                    const posValue = shares * entry;
-                    return (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-center">
-                            <div className="text-[8px] font-black text-red-300 uppercase tracking-widest mb-0.5">Maksimal Risiko</div>
-                            <div className="text-base font-black text-red-400" style={{ textShadow: "0 0 14px rgba(239,68,68,0.5)" }}>Rp {fmt(nominalRisiko)}</div>
-                          </div>
-                          <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/25 text-center">
-                            <div className="text-[8px] font-black text-green-300 uppercase tracking-widest mb-0.5">Rekomendasi Posisi</div>
-                            <div className="text-lg font-black text-green-400 leading-none" style={{ textShadow: "0 0 16px rgba(34,197,94,0.55)" }}>
-                              {lot < 1 ? "0" : fmt(lot)} <span className="text-[10px] text-green-300/70">Lot</span>
-                            </div>
-                          </div>
-                        </div>
-                        {lot < 1 ? (
-                          <p className="text-[10px] text-amber-400/90 leading-relaxed">⚠️ Modal/risiko terlalu kecil untuk 1 lot pada jarak SL ini. Naikkan modal atau % risiko.</p>
-                        ) : (
-                          <p className="text-[9px] text-slate-500 leading-relaxed">≈ {fmt(shares)} lembar · Nilai posisi <span className="text-slate-300">Rp {fmt(posValue)}</span> · Risiko {fmt(jarakSL)}/lembar</p>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <p className="text-[9px] text-slate-600 mt-3 pt-2 border-t border-white/5 leading-relaxed">1 lot = 100 lembar. Rumus: Lot = ⌊(Modal × Risiko%) ÷ (|Entry−SL| × 100)⌋. Entry &amp; SL auto dari AI, bisa diubah manual.</p>
-                </div>
+                </details>
 
                 {/* Level Kunci (Confluence Matrix) + News & Sentiment — mengisi ruang kartu lama */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2005,34 +2332,7 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
                   </div>
                 )}
 
-                {/* P16: Smart Market Map — render-only; Market Map dari pipeline (page memo) */}
-                <ErrorBoundary>
-                  <SmartMarketMap map={marketMapData} currentPrice={currentPrice || close} />
-                </ErrorBoundary>
-
-                {/* P17 · Module 1: Institutional Liquidity — render-only (output pipeline) */}
-                <ErrorBoundary>
-                  <LiquidityMap
-                    result={liquidityData}
-                    currentPrice={Array.isArray(vcpData) && vcpData.length ? vcpData[vcpData.length - 1].close : (parseFloat(currentPrice) || parseFloat(close) || 0)}
-                    loading={!vcpData}
-                  />
-                </ErrorBoundary>
-
-                {/* P17 · Module 3: Institutional Order Block — render-only (output pipeline) */}
-                <ErrorBoundary>
-                  <OrderBlockPanel result={orderBlocksData} loading={!vcpData} />
-                </ErrorBoundary>
-
-                {/* P17 · Module 4: Institutional Fair Value Gap — render-only (output pipeline) */}
-                <ErrorBoundary>
-                  <FairValueGapPanel result={fvgData} loading={!vcpData} />
-                </ErrorBoundary>
-
-                {/* P17 · Module 5: Institutional Confluence — render-only (single source of truth) */}
-                <ErrorBoundary>
-                  <InstitutionalConfluencePanel result={confluenceData} loading={!result} />
-                </ErrorBoundary>
+                {/* P23: Market Map / Liquidity / Order Block / FVG / Confluence dipindah ke accordion "Detail Analysis" di atas. */}
 
                 {/* P17 · Module 2: AI Institutional Validator — render-only; orchestrator menjalankan Validator */}
                 <ErrorBoundary>
@@ -2470,6 +2770,11 @@ Tinggal eksekusi! Jangan telat masuk, ntar nyesel liat running trade.
               </div>
             </div>
           </div>
+        )}
+
+        {/* ══ RIGHT ISSUE TAB ═══════════════════════════════════════════════════════════════════ */}
+        {tab === "rightissue" && (
+          <RightIssueCalculator />
         )}
       </div>
 
